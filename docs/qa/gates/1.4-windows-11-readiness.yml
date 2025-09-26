@@ -1,0 +1,41 @@
+schema: 1
+story: '1.4'
+story_title: 'Windows 11 Readiness'
+gate: PASS
+status_reason: 'Encoding fallback, newline normalization, and Windows path handling verified with tests and runbook.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-26T00:00:00Z'
+
+top_issues: []
+waiver: { active: false }
+
+quality_score: 100
+expires: '2025-10-10T00:00:00Z'
+
+evidence:
+  tests_reviewed: 10
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Input validation avoids path leaks; no secrets printed.'
+  performance:
+    status: PASS
+    notes: 'Two-decoder strategy is negligible overhead; I/O minimal.'
+  reliability:
+    status: PASS
+    notes: 'Deterministic encoding fallback and normalized output; tests cover failure paths.'
+  maintainability:
+    status: PASS
+    notes: 'Helper utilities isolate path/encoding logic; tests document behavior.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Document cp1252 fallback behavior briefly in README for Windows users.'
+      refs: ['README.md']
+

@@ -91,7 +91,10 @@ def test_run_executes_with_valid_files(tmp_path: Path) -> None:
     result = runner.invoke(app, ["run", "--resume", str(resume), "--jd", str(jd)])
 
     assert result.exit_code == int(ExitCode.SUCCESS)
-    assert "Pipeline execution is not yet implemented in this scaffold." in _normalize(result.stdout)
+    output = result.stdout
+    assert "Resume resume.pdf decoded as UTF-8 (with BOM)" in output
+    assert "Job description job.txt decoded as UTF-8 (with BOM)" in output
+    assert "Pipeline execution is not yet implemented in this scaffold." in output
 
 
 def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
@@ -103,11 +106,15 @@ def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
     result = runner.invoke(app, ["--quiet", "run", "--resume", str(resume), "--jd", str(jd)])
 
     assert result.exit_code == int(ExitCode.SUCCESS)
-    assert "Pipeline execution is not yet implemented in this scaffold." not in _normalize(result.stdout)
+    assert "Pipeline execution is not yet implemented in this scaffold." not in _normalize(
+        result.stdout
+    )
     assert getattr(configure_logging, "_level", logging.INFO) == logging.WARNING
 
 
-def test_run_handles_input_validation_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_handles_input_validation_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     resume = tmp_path / "resume.pdf"
     resume.write_text("resume")
     jd = tmp_path / "jd.txt"
@@ -167,7 +174,7 @@ def test_run_maps_domain_errors(
     jd = tmp_path / "jd.txt"
     jd.write_text("jd")
 
-    def _raise_error(*, resume_path: Path, jd_path: Path) -> None:
+    def _raise_error(*, resume_doc, jd_doc) -> None:
         raise error_factory()
 
     monkeypatch.setattr("filtra.orchestration.runner._perform_run", _raise_error)
@@ -261,3 +268,48 @@ def test_warmup_command_maps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     combined = _normalize(result.stdout + result.stderr)
     assert "Gateway unavailable" in combined
     assert "Remediation" in combined
+
+
+def test_run_accepts_windows_1252_job_description(tmp_path: Path) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("perfil", encoding="utf-8")
+    jd = tmp_path / "job-desc.txt"
+    jd.write_bytes("requisición".encode("cp1252"))
+
+    result = runner.invoke(app, ["run", "--resume", str(resume), "--jd", str(jd)])
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    assert "Windows-1252" in result.stdout
+
+
+def test_run_reports_encoding_failure(tmp_path: Path) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("perfil", encoding="utf-8")
+    jd = tmp_path / "job-desc.txt"
+    jd.write_bytes(bytes([0x81, 0x82, 0x83]))
+
+    result = runner.invoke(
+        app,
+        ["run", "--resume", str(resume), "--jd", str(jd)],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == int(ExitCode.INVALID_INPUT)
+    combined = _normalize(result.stdout + result.stderr)
+    assert "not encoded" in combined
+    assert "Windows-1252" in combined
+
+
+def test_run_handles_paths_with_spaces_and_normalizes_newlines(tmp_path: Path) -> None:
+    resume = tmp_path / "resume spaced.txt"
+    resume.write_text("línea uno\r\nlínea dos", encoding="utf-8")
+    jd = tmp_path / "job desc.txt"
+    jd.write_text("descriptor\r\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["run", "--resume", str(resume), "--jd", str(jd)])
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    output = result.stdout
+    assert '"resume spaced.txt"' in output
+    assert '"job desc.txt"' in output
+    assert "\r" not in output

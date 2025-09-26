@@ -66,18 +66,35 @@ def _validate_file(path: Path, description: str) -> Path:
             message=f"Missing {description} path.",
             remediation=f"Provide a valid {description} file via the CLI options.",
         )
-    if not path.exists() or not path.is_file():
+
+    candidate = path.expanduser()
+    try:
+        resolved = candidate.resolve()
+    except OSError:
+        resolved = candidate
+
+    display = _quote_path(resolved)
+    if not resolved.exists() or not resolved.is_file():
         raise InputValidationError(
-            message=f"{description.capitalize()} path '{path}' does not exist or is not a file.",
+            message=f"{description.capitalize()} path {display} does not exist or is not a file.",
             remediation=f"Verify the {description} path and ensure the file is readable.",
         )
-    return path
+    return resolved
 
 
 def _is_quiet_mode() -> bool:
     """Determine if the CLI is currently running in quiet mode."""
 
     return getattr(configure_logging, "_level", logging.INFO) == logging.WARNING
+
+
+def _quote_path(path: Path) -> str:
+    """Return a quoted string representation when spaces are present."""
+
+    value = str(path)
+    if " " in value:
+        return f'"{value}"'
+    return value
 
 
 def _render_health_report(report: HealthReport) -> None:
@@ -145,9 +162,9 @@ def _format_bytes(size: int) -> str:
 
     if size < 1024:
         return f"{size} B"
-    if size < 1024 ** 2:
+    if size < 1024**2:
         return f"{size / 1024:.1f} KiB"
-    if size < 1024 ** 3:
+    if size < 1024**3:
         return f"{size / (1024 ** 2):.1f} MiB"
     return f"{size / (1024 ** 3):.2f} GiB"
 
@@ -232,6 +249,9 @@ def run(
         raise typer.Exit(code=int(ExitCode.UNEXPECTED_ERROR)) from exc
 
     outcome = run_pipeline(resume_path=resume_path, jd_path=jd_path)
+
+    if outcome.message and not _is_quiet_mode():
+        typer.echo(outcome.message)
 
     raise typer.Exit(code=int(outcome.exit_code))
 

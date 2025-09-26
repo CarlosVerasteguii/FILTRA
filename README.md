@@ -97,6 +97,25 @@ Use `scripts\warmup_demo.ps1` as a convenience wrapper before customer demos; it
 | 5    | LLM gateway error or missing API key       | Set `OPENROUTER_API_KEY` and confirm proxy settings before retrying. |
 | 6    | Pipeline exceeded the configured timeout   | Retry on a stable network or increase the timeout once configuration is exposed. |
 
+## Windows 11 Verification Checklist
+The following checklist confirms Filtra runs end-to-end on a clean Windows 11 PowerShell session. Quote every path to survive directories with spaces.
+
+1. Activate the project virtual environment and install dependencies as described above.
+2. Run `python -m filtra --health` to confirm prerequisites resolve without network calls.
+3. Execute `scripts\warmup_demo.ps1` (optionally pass `-WarmupArgs @('--quiet')`) and confirm the Hugging Face cache lives under `$env:LOCALAPPDATA\filtra\models`.
+4. Copy the provided samples into a folder with spaces, then run the CLI against those paths:
+   ```powershell
+   $target = Join-Path $env:USERPROFILE 'Documents\Filtra Samples'
+   New-Item -ItemType Directory -Path $target -Force | Out-Null
+   Copy-Item .\samples\inputs\resume_sample.pdf "$target\resume sample.pdf"
+   Copy-Item .\samples\inputs\jd_sample.txt "$target\jd sample.txt"
+   python -m filtra run --resume "$target\resume sample.pdf" --jd "$target\jd sample.txt"
+   ```
+   The output should report each file name in quotes, list the detected encodings, and only use `
+` newlines.
+5. Open the copied job description in Notepad, save it with **ANSI** encoding, and rerun the command to confirm Windows-1252 fallback still succeeds.
+6. Record the run results, durations, and any deviations in `docs/qa/windows-11-runbook.md` for traceability.
+
 ## Repository Bootstrap Checklist
 Use this flow when rehydrating the scaffold in a new folder:
 

@@ -6,6 +6,10 @@
     then executes `python -m filtra warm-up` with any additional arguments you supply.
     Use this script before live demos to pre-download Hugging Face weights and
     verify OpenRouter connectivity without waiting during the main run.
+.EXAMPLE
+    .\scripts\warmup_demo.ps1 -WarmupArgs @('--quiet')
+.EXAMPLE
+    & ".\scripts\warmup_demo.ps1" -WarmupArgs @('--quiet')
 #>
 [CmdletBinding()]
 param(

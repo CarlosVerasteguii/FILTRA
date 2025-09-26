@@ -1,4 +1,5 @@
 """Execution orchestrator for Filtra CLI commands."""
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +16,7 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
+from filtra.utils import LoadedDocument, load_text_document
 
 logger = logging.getLogger("filtra.orchestration.runner")
 
@@ -70,7 +72,9 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
     """Execute the evaluation orchestration lifecycle."""
 
     try:
-        _perform_run(resume_path=resume_path, jd_path=jd_path)
+        resume_doc = load_text_document(resume_path, "resume")
+        jd_doc = load_text_document(jd_path, "job description")
+        _perform_run(resume_doc=resume_doc, jd_doc=jd_doc)
     except TimeoutExceededError as error:
         return handle_domain_error(error)
     except FiltraError as error:
@@ -92,19 +96,43 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
             remediation=remediation,
         )
 
+    summary = [
+        (
+            f"Resume {resume_doc.display_name} decoded as {resume_doc.display_encoding} "
+            f"({len(resume_doc.text)} characters)."
+        ),
+        (
+            f"Job description {jd_doc.display_name} decoded as {jd_doc.display_encoding} "
+            f"({len(jd_doc.text)} characters)."
+        ),
+        "Pipeline execution is not yet implemented in this scaffold.",
+    ]
+
     return ExecutionOutcome(
         exit_code=ExitCode.SUCCESS,
         status="success",
-        message="Evaluation pipeline completed successfully.",
+        message="\n".join(summary),
     )
 
 
-def _perform_run(*, resume_path: Path, jd_path: Path) -> None:
+def _perform_run(*, resume_doc: LoadedDocument, jd_doc: LoadedDocument) -> None:
     """Actual orchestration logic placeholder until the pipeline is wired in."""
 
     logger.info(
         "Starting evaluation run",
-        extra={"resume": resume_path.name, "jd": jd_path.name},
+        extra={
+            "resume": resume_doc.display_name,
+            "jd": jd_doc.display_name,
+        },
+    )
+    logger.info(
+        "Loaded documents",
+        extra={
+            "resume_encoding": resume_doc.display_encoding,
+            "jd_encoding": jd_doc.display_encoding,
+            "resume_chars": len(resume_doc.text),
+            "jd_chars": len(jd_doc.text),
+        },
     )
     logger.info("Pipeline execution is not yet implemented in this scaffold.")
 
