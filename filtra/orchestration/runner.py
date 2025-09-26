@@ -72,11 +72,11 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
     try:
         _perform_run(resume_path=resume_path, jd_path=jd_path)
     except TimeoutExceededError as error:
-        return _handle_domain_error(error)
+        return handle_domain_error(error)
     except FiltraError as error:
-        return _handle_domain_error(error)
+        return handle_domain_error(error)
     except TimeoutError as error:  # pragma: no cover - safety net
-        return _handle_domain_error(
+        return handle_domain_error(
             TimeoutExceededError(
                 message=str(error) or "Processing timed out while executing the pipeline.",
                 remediation="Retry with a stable network connection or increase the configured timeout.",
@@ -109,7 +109,7 @@ def _perform_run(*, resume_path: Path, jd_path: Path) -> None:
     logger.info("Pipeline execution is not yet implemented in this scaffold.")
 
 
-def _handle_domain_error(error: FiltraError) -> ExecutionOutcome:
+def handle_domain_error(error: FiltraError) -> ExecutionOutcome:
     """Translate a domain error into an execution outcome and log remediation hints."""
 
     exit_code, default_message, default_remediation = _map_error(error)
@@ -142,4 +142,4 @@ def _map_error(error: FiltraError) -> Tuple[ExitCode, str, str | None]:
     )
 
 
-__all__ = ["ExecutionOutcome", "run_pipeline"]
+__all__ = ["ExecutionOutcome", "handle_domain_error", "run_pipeline"]

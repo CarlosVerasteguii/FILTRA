@@ -44,7 +44,7 @@ python -m filtra run --resume "./samples/inputs/resume_sample.pdf" --jd "./sampl
 # Run quietly, emitting only warnings and errors
 python -m filtra --quiet run --resume "./samples/inputs/resume_sample.pdf" --jd "./samples/inputs/jd_sample.txt"
 
-# Invoke warm-up diagnostics placeholder (future stories will wire real checks)
+# Prime model cache and verify OpenRouter connectivity
 python -m filtra warm-up
 ```
 
@@ -52,6 +52,40 @@ python -m filtra warm-up
 
 ### Health Diagnostics
 Use `python -m filtra --health` before demos to confirm the runtime, secrets, proxy variables, and Hugging Face cache are in good shape. The command never performs network calls; it only inspects local configuration and prints PASS/FAIL rows with remediation guidance for anything missing.
+
+### Warm-up Diagnostics
+`python -m filtra warm-up` now performs the full diagnostics workflow:
+
+- Pre-downloads the multilingual NER model into the Hugging Face cache.
+- Issues a lightweight OpenRouter request (5s timeout, retry once) to confirm the API key, proxy settings, and network access are valid.
+- Summarises proxy variables, cache location, cache size, and execution time while respecting `--quiet` and without exposing secrets.
+
+Example output:
+
+````powershell
+python -m filtra warm-up
+Filtra warm-up diagnostics
+Python runtime     : 3.10.11
+Model cache folder : C:\Users\carlo\AppData\Local\filtra\models
+Cache on disk      : 112.4 MiB
+Duration           : 18.4s
+
+Proxy environment:
+  HTTPS_PROXY : set (value hidden)
+  HTTP_PROXY  : (not set)
+  NO_PROXY    : set (value hidden)
+
+[PASS] Python runtime - Detected Python 3.10.11.
+[PASS] OpenRouter API key - OPENROUTER_API_KEY detected (48 characters).
+[PASS] Proxy configuration - Proxy variables detected: HTTPS_PROXY, NO_PROXY.
+[PASS] NER model cache - Prefetched 'Davlan/bert-base-multilingual-cased-ner-hrl' into C:\Users\carlo\AppData\Local\filtra\models (~112.4 MiB on disk).
+[PASS] OpenRouter connectivity - OpenRouter endpoint https://openrouter.ai/api/v1/chat/completions responded in 0.78 seconds (request req-xyz123).
+[PASS] Warm-up duration - Completed in 18.40 seconds (budget 120s).
+
+Overall status: PASS
+````
+
+Use `scripts\warmup_demo.ps1` as a convenience wrapper before customer demos; it checks prerequisites, reports proxy status without revealing values, and forwards all arguments to `python -m filtra warm-up`.
 
 ### Exit Codes & Remediation
 | Code | Scenario                                   | Remediation Hint |
@@ -79,16 +113,16 @@ Use this flow when rehydrating the scaffold in a new folder:
    ```powershell
    pytest
    ```
-5. Optionally pre-download large model weights once virtualenv is ready (future warm-up command will automate this).
+5. Run `python -m filtra warm-up` (or `scripts\warmup_demo.ps1`) once to prime the model cache and validate OpenRouter connectivity ahead of the first demo.
 
 ## Scaffold Overview & Future Workflow Fit
 - `filtra/cli.py` hosts the Typer application with `run` and `warm-up` commands, structured exit codes, and Rich logging that respects `--quiet`.
 - `filtra/__main__.py` enables `python -m filtra`, matching the architecture source tree contract.
-- `tests/test_cli.py` exercises help text, argument validation, and quiet logging semantics following the unit test standards.
+- `tests/test_cli.py` exercises help text, argument validation, warm-up output, and quiet logging semantics following the unit test standards.
 - `requirements.in` tracks top-level dependencies from the architecture tech stack. `requirements.txt` pins those versions for deterministic installs on Windows 11.
 - Tooling configs (`pyproject.toml`, `ruff.toml`) align with the coding standards (Black line length 100, Ruff linting/import sorting, pytest defaults).
 
-This layout mirrors the monolithic workflow described in the architecture: the CLI command layer hands off to an execution orchestrator (to be implemented in later stories), while the warm-up command will connect to diagnostics that prime transformers models and OpenRouter connectivity.
+This layout mirrors the monolithic workflow described in the architecture: the CLI command layer now hands off to the diagnostics service to prepare transformers models and verify OpenRouter, while future stories will wire the remaining orchestration pipeline.
 
 ## Updating Dependencies Safely
 When you need to refresh versions, run the following from an activated virtual environment after editing `requirements.in`:
@@ -104,5 +138,5 @@ Document any installation hiccups (especially transformer wheel downloads) in `d
 - **SSL or proxy issues**: ensure `HTTPS_PROXY`/`HTTP_PROXY` are set before invoking `pip install` or the CLI. The application honours these variables through `httpx`.
 - **Large dependency downloads**: Transformers wheels can be sizeable; rerun `pip install` with `--no-cache-dir` if OneDrive quotas cause issues.
 - **Virtual environment path issues**: If the activation script is blocked, confirm the execution policy note above and re-run `.\.venv\Scripts\Activate.ps1` from the project root.
-- **Unclear failures**: Run `python -m filtra --health` to see PASS/FAIL diagnostics and remediation text for missing environment variables, caches, or proxies.
+- **Unclear failures**: Run `python -m filtra warm-up` to populate caches and surface remediation hints for API or proxy configuration, or `python -m filtra --health` for offline diagnostics.
 

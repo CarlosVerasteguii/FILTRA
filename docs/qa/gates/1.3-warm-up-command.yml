@@ -1,0 +1,43 @@
+schema: 1
+story: '1.3'
+story_title: 'Warm-up Command'
+gate: PASS
+status_reason: 'Warm-up CLI, documentation, and PowerShell helper now mask proxy values while torch dependency is restored for transformers runtime.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-26T20:20:04+00:00'
+
+top_issues: []
+waiver:
+  active: false
+
+quality_score: 95
+expires: '2025-10-10T20:20:04+00:00'
+
+evidence:
+  tests_reviewed: 4
+  risks_identified: 1
+  trace:
+    ac_covered: [1, 3, 4]
+    ac_gaps: [2]
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Proxy values are masked across CLI output, README example, and PowerShell helper.'
+  performance:
+    status: PASS
+    notes: 'Warm-up duration guard enforces 120s budget; HTTP retries bounded.'
+  reliability:
+    status: PASS
+    notes: 'CLI wiring and orchestrator tests cover success and failure exit codes.'
+  maintainability:
+    status: PASS
+    notes: 'Implementation follows existing diagnostics patterns and shared helpers.'
+
+recommendations:
+  immediate:
+    - action: 'Mask proxy environment output in scripts/warmup_demo.ps1 and keep logs secret-safe.'
+      refs: ['scripts/warmup_demo.ps1']
+    - action: 'Update README warm-up example to demonstrate masked proxy output and reinforce security guidance.'
+      refs: ['README.md']
+  future: []

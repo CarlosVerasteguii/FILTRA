@@ -9,7 +9,14 @@ from rich.logging import RichHandler
 from . import FiltraError, __version__
 from .errors import InputValidationError
 from .exit_codes import ExitCode
-from .orchestration import HealthReport, collect_health_report, run_pipeline
+from .orchestration import (
+    HealthReport,
+    WarmupResult,
+    collect_health_report,
+    handle_domain_error,
+    run_pipeline,
+    run_warmup,
+)
 
 APP_NAME = "filtra"
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -67,6 +74,12 @@ def _validate_file(path: Path, description: str) -> Path:
     return path
 
 
+def _is_quiet_mode() -> bool:
+    """Determine if the CLI is currently running in quiet mode."""
+
+    return getattr(configure_logging, "_level", logging.INFO) == logging.WARNING
+
+
 def _render_health_report(report: HealthReport) -> None:
     """Pretty-print the health diagnostics to the console."""
 
@@ -87,6 +100,56 @@ def _render_health_report(report: HealthReport) -> None:
 
     typer.echo("")
     typer.echo(f"Overall status: {report.overall_status}")
+
+
+def _render_warmup_result(result: WarmupResult, *, quiet: bool) -> None:
+    """Present warm-up diagnostics while respecting quiet mode expectations."""
+
+    cache_summary = _format_bytes(result.cache_size_bytes)
+
+    if quiet:
+        typer.echo(
+            f"Warm-up {result.overall_status} in {result.duration_seconds:.2f}s; "
+            f"cache {cache_summary}"
+        )
+        for check in result.checks:
+            typer.echo(f"[{check.status}] {check.name}")
+        return
+
+    typer.echo("Filtra warm-up diagnostics")
+    typer.echo(f"Python runtime     : {result.python_version}")
+    typer.echo(f"Model cache folder : {result.huggingface_cache}")
+    typer.echo(f"Cache on disk      : {cache_summary}")
+    typer.echo(f"Duration           : {result.duration_seconds:.2f}s")
+
+    typer.echo("")
+    typer.echo("Proxy environment:")
+    for name, value in result.proxy_environment.items():
+        status = "set (value hidden)" if value else "(not set)"
+        typer.echo(f"  {name:<11}: {status}")
+    if not any(result.proxy_environment.values()):
+        typer.echo("  (none configured; direct internet access assumed)")
+
+    typer.echo("")
+    for check in result.checks:
+        typer.echo(f"[{check.status}] {check.name} - {check.detail}")
+        if check.remediation:
+            typer.echo(f"    Remediation: {check.remediation}")
+
+    typer.echo("")
+    typer.echo(f"Overall status: {result.overall_status}")
+
+
+def _format_bytes(size: int) -> str:
+    """Format a byte count into a human-readable string."""
+
+    if size < 1024:
+        return f"{size} B"
+    if size < 1024 ** 2:
+        return f"{size / 1024:.1f} KiB"
+    if size < 1024 ** 3:
+        return f"{size / (1024 ** 2):.1f} MiB"
+    return f"{size / (1024 ** 3):.2f} GiB"
 
 
 @app.callback(invoke_without_command=True)
@@ -175,10 +238,20 @@ def run(
 
 @app.command("warm-up")
 def warm_up() -> None:
-    """Placeholder warm-up routine for model caching and diagnostics."""
+    """Prime model caches and verify external service connectivity."""
 
     logger = logging.getLogger("filtra.cli")
-    logger.info("Warm-up diagnostics are not yet implemented in this scaffold.")
+
+    try:
+        result = run_warmup()
+    except FiltraError as exc:
+        outcome = handle_domain_error(exc)
+        raise typer.Exit(code=int(outcome.exit_code)) from exc
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception("Unexpected error during warm-up diagnostics.")
+        raise typer.Exit(code=int(ExitCode.UNEXPECTED_ERROR)) from exc
+
+    _render_warmup_result(result, quiet=_is_quiet_mode())
     raise typer.Exit(code=int(ExitCode.SUCCESS))
 
 
@@ -189,4 +262,3 @@ def entrypoint() -> None:
 
 
 __all__ = ["app", "entrypoint", "configure_logging", "ExitCode"]
-

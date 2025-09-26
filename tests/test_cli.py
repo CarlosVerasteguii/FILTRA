@@ -14,6 +14,7 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
+from filtra.orchestration import HealthCheck, WarmupResult
 
 runner = CliRunner(mix_stderr=False)
 
@@ -38,6 +39,30 @@ def _normalize(output: str) -> str:
     """Collapse whitespace to simplify assertions across Rich formatting."""
 
     return " ".join(output.split())
+
+
+def _warmup_result() -> WarmupResult:
+    cache_path = Path("C:/cache/filtra/models")
+    checks = (
+        HealthCheck(name="Python runtime", status="PASS", detail="Detected Python 3.10.11."),
+        HealthCheck(
+            name="OpenRouter connectivity",
+            status="PASS",
+            detail="Endpoint responded in 0.20 seconds.",
+        ),
+    )
+    return WarmupResult(
+        python_version="3.10.11",
+        huggingface_cache=cache_path,
+        cache_size_bytes=2048,
+        duration_seconds=2.3,
+        proxy_environment={
+            "HTTPS_PROXY": "http://proxy.local:8080",
+            "HTTP_PROXY": None,
+            "NO_PROXY": "localhost",
+        },
+        checks=checks,
+    )
 
 
 def test_root_help_lists_commands() -> None:
@@ -198,3 +223,41 @@ def test_health_flag_reports_failures(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert "Remediation" in combined
     assert "Overall status: FAIL" in combined
 
+
+def test_warmup_command_renders_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("filtra.cli.run_warmup", lambda: _warmup_result())
+
+    result = runner.invoke(app, ["warm-up"], catch_exceptions=False)
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    combined = _normalize(result.stdout)
+    assert "Filtra warm-up diagnostics" in combined
+    assert "Cache on disk" in combined
+    assert "2.0 KiB" in combined
+    assert "[PASS] OpenRouter connectivity" in combined
+
+
+def test_warmup_command_respects_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("filtra.cli.run_warmup", lambda: _warmup_result())
+
+    result = runner.invoke(app, ["--quiet", "warm-up"], catch_exceptions=False)
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    combined = _normalize(result.stdout)
+    assert "Proxy environment" not in combined
+    assert "Warm-up PASS" in combined
+    assert "[PASS] OpenRouter connectivity" in combined
+
+
+def test_warmup_command_maps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise() -> None:
+        raise LLMRequestError("Gateway unavailable", remediation="Set OPENROUTER_API_KEY")
+
+    monkeypatch.setattr("filtra.cli.run_warmup", _raise)
+
+    result = runner.invoke(app, ["warm-up"], catch_exceptions=False)
+
+    assert result.exit_code == int(ExitCode.LLM_ERROR)
+    combined = _normalize(result.stdout + result.stderr)
+    assert "Gateway unavailable" in combined
+    assert "Remediation" in combined

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable, Tuple
 
 _REQUIREMENTS_FILENAME = "requirements.txt"
+_PROXY_ENV_VARS: Tuple[str, ...] = ("HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY")
 
 
 @dataclass(frozen=True)
@@ -40,28 +41,30 @@ def collect_health_report(project_root: Path | None = None) -> HealthReport:
     """Gather offline diagnostics without invoking external services."""
 
     root = project_root or Path.cwd()
-    python_check = _check_python_version()
-    api_key_check = _check_api_key()
-    proxy_check = _check_proxy_configuration()
+    python_check = check_python_version()
+    api_key_check = check_api_key()
+    proxy_check = check_proxy_configuration()
 
-    cache_path = _resolve_cache_directory()
-    cache_check = _check_cache_directory(cache_path)
+    cache_path = resolve_cache_directory()
+    cache_check = check_cache_directory(cache_path)
 
-    pins = tuple(_load_dependency_pins(root / _REQUIREMENTS_FILENAME))
-    dependency_check = _check_dependency_pins(pins)
+    pins = tuple(load_dependency_pins(root / _REQUIREMENTS_FILENAME))
+    dependency_check = check_dependency_pins(pins)
 
     checks = (python_check, api_key_check, proxy_check, cache_check, dependency_check)
 
     return HealthReport(
-        python_version=_format_python_version(),
+        python_version=format_python_version(),
         huggingface_cache=cache_path,
         dependency_pins=pins,
         checks=checks,
     )
 
 
-def _check_python_version() -> HealthCheck:
-    version = _format_python_version()
+def check_python_version() -> HealthCheck:
+    """Validate the interpreter version matches supported constraints."""
+
+    version = format_python_version()
     interpreter_ok = sys.version_info.major == 3 and sys.version_info.minor >= 10
 
     if interpreter_ok:
@@ -80,7 +83,9 @@ def _check_python_version() -> HealthCheck:
     )
 
 
-def _check_api_key() -> HealthCheck:
+def check_api_key() -> HealthCheck:
+    """Report whether the OpenRouter API key is configured."""
+
     api_key = os.getenv("OPENROUTER_API_KEY", "")
     if api_key:
         masked = f"{len(api_key)} characters"
@@ -99,12 +104,16 @@ def _check_api_key() -> HealthCheck:
     )
 
 
-def _check_proxy_configuration() -> HealthCheck:
-    proxy_vars = {
-        "HTTPS_PROXY": os.getenv("HTTPS_PROXY"),
-        "HTTP_PROXY": os.getenv("HTTP_PROXY"),
-        "NO_PROXY": os.getenv("NO_PROXY"),
-    }
+def get_proxy_environment() -> dict[str, str | None]:
+    """Return the current proxy-related environment variables."""
+
+    return {name: os.getenv(name) for name in _PROXY_ENV_VARS}
+
+
+def check_proxy_configuration() -> HealthCheck:
+    """Inspect proxy environment variables and summarise their state."""
+
+    proxy_vars = get_proxy_environment()
 
     configured = any(value for value in proxy_vars.values())
     configured_vars = ", ".join(name for name, value in proxy_vars.items() if value)
@@ -126,7 +135,9 @@ def _check_proxy_configuration() -> HealthCheck:
     )
 
 
-def _resolve_cache_directory() -> Path:
+def resolve_cache_directory() -> Path:
+    """Determine the Hugging Face cache directory to use for model weights."""
+
     local_app_data = os.getenv("LOCALAPPDATA")
     if local_app_data:
         return Path(local_app_data) / "filtra" / "models"
@@ -142,7 +153,9 @@ def _resolve_cache_directory() -> Path:
     return Path.home() / ".cache" / "filtra" / "models"
 
 
-def _check_cache_directory(cache_path: Path) -> HealthCheck:
+def check_cache_directory(cache_path: Path) -> HealthCheck:
+    """Validate whether a cache directory already contains model artifacts."""
+
     if cache_path.exists():
         detail = f"Model cache present at {cache_path}."
         return HealthCheck(name="Model cache", status="PASS", detail=detail)
@@ -157,7 +170,9 @@ def _check_cache_directory(cache_path: Path) -> HealthCheck:
     )
 
 
-def _load_dependency_pins(requirements_path: Path) -> Iterable[str]:
+def load_dependency_pins(requirements_path: Path) -> Iterable[str]:
+    """Extract a sample of pinned dependencies to display in diagnostics."""
+
     if not requirements_path.exists():
         return []
 
@@ -173,7 +188,9 @@ def _load_dependency_pins(requirements_path: Path) -> Iterable[str]:
     return pins
 
 
-def _check_dependency_pins(pins: Iterable[str]) -> HealthCheck:
+def check_dependency_pins(pins: Iterable[str]) -> HealthCheck:
+    """Summarise whether dependency pins are present."""
+
     pins_tuple = tuple(pins)
     if pins_tuple:
         detail = "Key dependencies: " + ", ".join(pins_tuple)
@@ -188,8 +205,23 @@ def _check_dependency_pins(pins: Iterable[str]) -> HealthCheck:
     )
 
 
-def _format_python_version() -> str:
+def format_python_version() -> str:
+    """Return the current interpreter version as a string."""
+
     return f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 
 
-__all__ = ["HealthCheck", "HealthReport", "collect_health_report"]
+__all__ = [
+    "HealthCheck",
+    "HealthReport",
+    "check_api_key",
+    "check_cache_directory",
+    "check_dependency_pins",
+    "check_proxy_configuration",
+    "check_python_version",
+    "collect_health_report",
+    "format_python_version",
+    "get_proxy_environment",
+    "load_dependency_pins",
+    "resolve_cache_directory",
+]
