@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filtra"
+version = "0.1.0"
+description = "Resume vs job description evaluation CLI scaffold."
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "License :: Other/Proprietary License",
+    "Operating System :: Microsoft :: Windows",
+]
+dependencies = []
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.coverage.run]
+branch = true
+source = ["filtra"]
+
+[tool.coverage.report]
+omit = [
+    "tests/*",
+]
+show_missing = true
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+pythonpath = ["."]
+

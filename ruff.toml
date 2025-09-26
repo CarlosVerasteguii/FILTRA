@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E203"]
+
+[lint.isort]
+known-first-party = ["filtra"]
+
+[format]
+quote-style = "double"
