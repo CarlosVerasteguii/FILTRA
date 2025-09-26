@@ -1,0 +1,54 @@
+schema: 1
+story: '1.2'
+story_title: 'Health Checks and Exit Codes'
+gate: PASS
+status_reason: 'Exit code orchestration and offline diagnostics deliver the requested behaviour; only minor hygiene/doc follow-ups remain.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-26T11:00:24.1540798-06:00'
+
+top_issues:
+  - severity: low
+    description: 'Remove generated directory filtra/orchestration/__pycache__/ before commit.'
+    suggested_owner: dev
+    refs:
+      - filtra/orchestration/__pycache__
+  - severity: low
+    description: 'Document fallback exit code 1 or align implementation with the published exit-code matrix.'
+    suggested_owner: dev
+    refs:
+      - README.md
+      - docs/architecture/error-handling-strategy.md
+waiver:
+  active: false
+
+quality_score: 100
+expires: '2025-10-10T11:00:27.4782681-06:00'
+
+evidence:
+  tests_reviewed: 11
+  risks_identified: 2
+  trace:
+    ac_covered: [1, 2, 3]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Remediation text avoids leaking secrets; diagnostics read env vars only.'
+  performance:
+    status: PASS
+    notes: 'Health checks perform lightweight filesystem/env inspection; orchestration remains stubbed.'
+  reliability:
+    status: PASS
+    notes: 'Exit codes deterministically map domain failures; tests cover primary flows.'
+  maintainability:
+    status: PASS
+    notes: 'Centralised exit-code enum and orchestration helpers improve future extension.'
+
+recommendations:
+  immediate:
+    - action: 'Delete filtra/orchestration/__pycache__/ before merging.'
+      refs: ['filtra/orchestration/__pycache__']
+  future:
+    - action: 'Document or adjust the fallback exit code 1 to match published guidance.'
+      refs: ['README.md', 'docs/architecture/error-handling-strategy.md']

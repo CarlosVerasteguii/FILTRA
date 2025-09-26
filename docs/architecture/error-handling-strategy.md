@@ -1,9 +1,9 @@
 # Error Handling Strategy
 
 ### General Approach
-- **Error Model:** Structured hierarchy rooted at `FiltraError` with modules raising `InputValidationError`, `PdfExtractionError`, `NERModelError`, `LLMRequestError`, and `ReportGenerationError`.
+- **Error Model:** Structured hierarchy rooted at `FiltraError` with modules raising `InputValidationError`, `PdfExtractionError`, `NERModelError`, `LLMRequestError`, and `TimeoutExceededError`. Each exception carries optional remediation text for the CLI to surface.
 - **Exception Hierarchy:** Wrap lower-level exceptions at module boundaries; allow system errors (KeyboardInterrupt, MemoryError) to bubble.
-- **Error Propagation:** Orchestrator catches domain errors, maps them to user-friendly messages, and sets exit codes while logging context.
+- **Error Propagation:** The orchestration runner translates domain errors into deterministic exit codes, emits remediation logging, and keeps secrets out of log output.
 
 ### Logging Standards
 - **Library:** stdlib `logging` with `rich.logging.RichHandler`.
@@ -20,13 +20,19 @@
 - **Error Translation:** Map to `LLMRequestError` with status code and offline guidance.
 
 #### Business Logic Errors
-- **Custom Exceptions:** `InputValidationError`, `RubricConfigError`, `NormalizationConflictError`.
+- **Custom Exceptions:** `InputValidationError`, `PdfExtractionError`, `NERModelError`, `LLMRequestError`, `TimeoutExceededError`.
 - **User-Facing Errors:** Plain English messages plus hints (e.g., check file path, rerun warm-up).
-- **Error Codes:** Exit codes 1 (general), 2 (input), 3 (external service), 4 (configuration).
+- **Exit Code Map:**
+  - `0` Success
+  - `2` Invalid input (missing files or CLI arguments)
+  - `3` Parse error (resume/JD unreadable)
+  - `4` NER failure (model load/execution)
+  - `5` LLM gateway failure (API key/proxy)
+  - `6` Timeout (orchestration exceeded allowed window)
 
 #### Data Consistency
 - **Transaction Strategy:** N/A (no persistent storage).
 - **Compensation Logic:** On partial pipeline failure, produce rubric-only report with warning banner when possible.
 - **Idempotency:** CLI reruns with identical inputs yield same results; warm-up cache prevents redundant downloads.
 
-
+

@@ -1,0 +1,145 @@
+"""Execution orchestrator for Filtra CLI commands."""
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Tuple, Type
+
+from filtra.exit_codes import ExitCode
+from filtra.errors import (
+    FiltraError,
+    InputValidationError,
+    LLMRequestError,
+    NERModelError,
+    PdfExtractionError,
+    TimeoutExceededError,
+)
+
+logger = logging.getLogger("filtra.orchestration.runner")
+
+
+@dataclass(frozen=True)
+class ExecutionOutcome:
+    """Result of invoking the orchestration pipeline."""
+
+    exit_code: ExitCode
+    status: str
+    message: str | None = None
+    remediation: str | None = None
+
+
+_ERROR_MAPPINGS: Tuple[
+    Tuple[Type[FiltraError], ExitCode, str, str | None],
+    ...,
+] = (
+    (
+        InputValidationError,
+        ExitCode.INVALID_INPUT,
+        "Input validation failed.",
+        "Double-check resume and job description paths and file permissions.",
+    ),
+    (
+        PdfExtractionError,
+        ExitCode.PARSE_ERROR,
+        "Failed to parse supplied documents.",
+        "Ensure the resume and job description are readable PDFs or UTF-8 text.",
+    ),
+    (
+        NERModelError,
+        ExitCode.NER_ERROR,
+        "Entity extraction failed while loading the NER model.",
+        "Clear the Hugging Face cache and rerun `filtra warm-up` to rebuild weights.",
+    ),
+    (
+        LLMRequestError,
+        ExitCode.LLM_ERROR,
+        "The language model gateway reported an error.",
+        "Set the OPENROUTER_API_KEY environment variable and verify proxy configuration.",
+    ),
+    (
+        TimeoutExceededError,
+        ExitCode.TIMEOUT,
+        "Pipeline execution timed out.",
+        "Retry with a stable network connection or increase the configured timeout.",
+    ),
+)
+
+
+def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
+    """Execute the evaluation orchestration lifecycle."""
+
+    try:
+        _perform_run(resume_path=resume_path, jd_path=jd_path)
+    except TimeoutExceededError as error:
+        return _handle_domain_error(error)
+    except FiltraError as error:
+        return _handle_domain_error(error)
+    except TimeoutError as error:  # pragma: no cover - safety net
+        return _handle_domain_error(
+            TimeoutExceededError(
+                message=str(error) or "Processing timed out while executing the pipeline.",
+                remediation="Retry with a stable network connection or increase the configured timeout.",
+            )
+        )
+    except Exception as error:  # pragma: no cover - defensive
+        logger.exception("Unexpected error occurred during orchestration.")
+        remediation = "Re-run with `--debug` enabled and inspect logs for details before retrying."
+        return ExecutionOutcome(
+            exit_code=ExitCode.UNEXPECTED_ERROR,
+            status="failure",
+            message=str(error) or "An unexpected error occurred during the evaluation run.",
+            remediation=remediation,
+        )
+
+    return ExecutionOutcome(
+        exit_code=ExitCode.SUCCESS,
+        status="success",
+        message="Evaluation pipeline completed successfully.",
+    )
+
+
+def _perform_run(*, resume_path: Path, jd_path: Path) -> None:
+    """Actual orchestration logic placeholder until the pipeline is wired in."""
+
+    logger.info(
+        "Starting evaluation run",
+        extra={"resume": resume_path.name, "jd": jd_path.name},
+    )
+    logger.info("Pipeline execution is not yet implemented in this scaffold.")
+
+
+def _handle_domain_error(error: FiltraError) -> ExecutionOutcome:
+    """Translate a domain error into an execution outcome and log remediation hints."""
+
+    exit_code, default_message, default_remediation = _map_error(error)
+    message = error.message or default_message
+    remediation = error.remediation or default_remediation
+
+    logger.error(message, extra={"exit_code": int(exit_code)})
+    if remediation:
+        logger.error("Remediation: %s", remediation)
+
+    return ExecutionOutcome(
+        exit_code=exit_code,
+        status="failure",
+        message=message,
+        remediation=remediation,
+    )
+
+
+def _map_error(error: FiltraError) -> Tuple[ExitCode, str, str | None]:
+    """Match an error instance to its configured exit code and remediation."""
+
+    for error_type, exit_code, message, remediation in _ERROR_MAPPINGS:
+        if isinstance(error, error_type):
+            return exit_code, message, remediation
+
+    return (
+        ExitCode.UNEXPECTED_ERROR,
+        "An unexpected error occurred during the evaluation run.",
+        "Enable debug logging and retry. If the issue persists, open a bug ticket with the logs.",
+    )
+
+
+__all__ = ["ExecutionOutcome", "run_pipeline"]

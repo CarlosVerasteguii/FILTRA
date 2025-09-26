@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
-from enum import IntEnum
 from pathlib import Path
 
 import typer
 from rich.logging import RichHandler
 
 from . import FiltraError, __version__
+from .errors import InputValidationError
+from .exit_codes import ExitCode
+from .orchestration import HealthReport, collect_health_report, run_pipeline
 
 APP_NAME = "filtra"
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -18,16 +20,6 @@ app = typer.Typer(
     add_completion=False,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
-
-
-class ExitCode(IntEnum):
-    """Supported CLI exit codes."""
-
-    SUCCESS = 0
-    GENERAL_FAILURE = 1
-    INPUT_ERROR = 2
-    EXTERNAL_FAILURE = 3
-    CONFIGURATION_FAILURE = 4
 
 
 def configure_logging(*, quiet: bool = False) -> None:
@@ -63,10 +55,38 @@ def _validate_file(path: Path, description: str) -> Path:
     """Ensure the provided file path exists and is readable."""
 
     if not path:
-        raise FiltraError(f"Missing {description} path.")
+        raise InputValidationError(
+            message=f"Missing {description} path.",
+            remediation=f"Provide a valid {description} file via the CLI options.",
+        )
     if not path.exists() or not path.is_file():
-        raise FiltraError(f"{description.capitalize()} path '{path}' does not exist or is not a file.")
+        raise InputValidationError(
+            message=f"{description.capitalize()} path '{path}' does not exist or is not a file.",
+            remediation=f"Verify the {description} path and ensure the file is readable.",
+        )
     return path
+
+
+def _render_health_report(report: HealthReport) -> None:
+    """Pretty-print the health diagnostics to the console."""
+
+    typer.echo("Filtra environment diagnostics")
+    typer.echo(f"Python runtime     : {report.python_version}")
+    typer.echo(f"Model cache folder : {report.huggingface_cache}")
+
+    if report.dependency_pins:
+        typer.echo("Pinned dependencies: " + ", ".join(report.dependency_pins))
+    else:
+        typer.echo("Pinned dependencies: none detected")
+
+    typer.echo("")
+    for check in report.checks:
+        typer.echo(f"[{check.status}] {check.name} - {check.detail}")
+        if check.remediation:
+            typer.echo(f"    Remediation: {check.remediation}")
+
+    typer.echo("")
+    typer.echo(f"Overall status: {report.overall_status}")
 
 
 @app.callback(invoke_without_command=True)
@@ -82,6 +102,11 @@ def main(
         "--version",
         help="Show the Filtra version and exit.",
     ),
+    health: bool = typer.Option(
+        False,
+        "--health",
+        help="Run offline diagnostics to verify environment readiness.",
+    ),
 ) -> None:
     """Configure logging and handle global options."""
 
@@ -89,6 +114,11 @@ def main(
 
     if version:
         typer.echo(__version__)
+        raise typer.Exit(code=int(ExitCode.SUCCESS))
+
+    if health:
+        report = collect_health_report()
+        _render_health_report(report)
         raise typer.Exit(code=int(ExitCode.SUCCESS))
 
     if ctx.invoked_subcommand is None:
@@ -126,14 +156,21 @@ def run(
     try:
         resume_path = _validate_file(resume, "resume")
         jd_path = _validate_file(jd, "job description")
+    except InputValidationError as exc:
+        logger.error(str(exc))
+        if exc.remediation:
+            logger.error("Remediation: %s", exc.remediation)
+        raise typer.Exit(code=int(ExitCode.INVALID_INPUT)) from exc
     except FiltraError as exc:  # pragma: no cover - defensive guard
         logger.error(str(exc))
-        raise typer.Exit(code=int(ExitCode.INPUT_ERROR)) from exc
+        remediation = getattr(exc, "remediation", None)
+        if remediation:
+            logger.error("Remediation: %s", remediation)
+        raise typer.Exit(code=int(ExitCode.UNEXPECTED_ERROR)) from exc
 
-    logger.info("Starting evaluation run", extra={"resume": resume_path.name, "jd": jd_path.name})
-    logger.info("Pipeline execution is not yet implemented in this scaffold.")
+    outcome = run_pipeline(resume_path=resume_path, jd_path=jd_path)
 
-    raise typer.Exit(code=int(ExitCode.SUCCESS))
+    raise typer.Exit(code=int(outcome.exit_code))
 
 
 @app.command("warm-up")

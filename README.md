@@ -32,6 +32,9 @@ All commands are tested from PowerShell with quoted paths to survive spaces and 
 # Show global help and commands
 python -m filtra --help
 
+# Run offline environment diagnostics
+python -m filtra --health
+
 # Display help for the run command and its parameters
 python -m filtra run --help
 
@@ -46,6 +49,19 @@ python -m filtra warm-up
 ```
 
 `--quiet` drops the global logging threshold to WARN while keeping structured Rich logging handlers. The scaffold logs placeholder information without leaking resume or JD contents.
+
+### Health Diagnostics
+Use `python -m filtra --health` before demos to confirm the runtime, secrets, proxy variables, and Hugging Face cache are in good shape. The command never performs network calls; it only inspects local configuration and prints PASS/FAIL rows with remediation guidance for anything missing.
+
+### Exit Codes & Remediation
+| Code | Scenario                                   | Remediation Hint |
+| ---- | ------------------------------------------ | ---------------- |
+| 0    | Successful run                             | No action required. |
+| 2    | Invalid or missing CLI input               | Verify resume/JD file paths and rerun the command. |
+| 3    | Document parsing failed                    | Check file readability; convert PDFs to text if necessary. |
+| 4    | NER model could not be initialised         | Clear the Hugging Face cache and run `filtra warm-up` to repopulate weights. |
+| 5    | LLM gateway error or missing API key       | Set `OPENROUTER_API_KEY` and confirm proxy settings before retrying. |
+| 6    | Pipeline exceeded the configured timeout   | Retry on a stable network or increase the timeout once configuration is exposed. |
 
 ## Repository Bootstrap Checklist
 Use this flow when rehydrating the scaffold in a new folder:
@@ -88,4 +104,5 @@ Document any installation hiccups (especially transformer wheel downloads) in `d
 - **SSL or proxy issues**: ensure `HTTPS_PROXY`/`HTTP_PROXY` are set before invoking `pip install` or the CLI. The application honours these variables through `httpx`.
 - **Large dependency downloads**: Transformers wheels can be sizeable; rerun `pip install` with `--no-cache-dir` if OneDrive quotas cause issues.
 - **Virtual environment path issues**: If the activation script is blocked, confirm the execution policy note above and re-run `.\.venv\Scripts\Activate.ps1` from the project root.
+- **Unclear failures**: Run `python -m filtra --health` to see PASS/FAIL diagnostics and remediation text for missing environment variables, caches, or proxies.
 
