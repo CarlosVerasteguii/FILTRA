@@ -1,62 +1,38 @@
 schema: 1
 story: '2.1'
 story_title: 'PDF Text Extraction'
-gate: FAIL
-status_reason: 'PDF extraction functionality missing; loader wiring and automated tests were not delivered.'
+gate: PASS
+status_reason: 'PDF loader handles text, encrypted, and image-only resumes with sanitized remediation and exit code 3 coverage.'
 reviewer: 'Quinn (Test Architect)'
-updated: '2025-09-28T20:33:53-06:00'
-quality_score: 60
-expires: '2025-10-12T20:33:53-06:00'
-top_issues:
-  - id: PDF-1
-    title: 'PDF extraction module missing'
-    severity: high
-    summary: 'Story deliverables absent; no pdf loader or orchestration wiring exists to raise PdfExtractionError.'
-    suggested_owner: dev
-    refs:
-      - filtra/ingestion/pdf_loader.py
-  - id: PDF-2
-    title: 'No automated coverage for PDF parse scenarios'
-    severity: high
-    summary: 'Unit/integration tests for text, encrypted, and image-only PDFs plus CLI exit code 3 validation are absent.'
-    suggested_owner: dev
-    refs:
-      - tests/test_pdf_loader.py
-      - tests/test_cli.py
+updated: '2025-09-29T00:45:00-06:00'
+quality_score: 100
+expires: '2025-10-13T00:45:00-06:00'
+top_issues: []
 waiver:
   active: false
 evidence:
-  tests_reviewed: 0
-  risks_identified: 2
+  tests_reviewed: 32
+  risks_identified: 0
   trace:
-    ac_covered: []
-    ac_gaps: [1, 2, 3]
+    ac_covered: [1, 2, 3, 4]
+    ac_gaps: []
 nfr_validation:
   security:
-    status: FAIL
-    notes: 'Binary/encrypted PDFs currently fall through plain-text loader, so remediation messaging never triggers.'
+    status: PASS
+    notes: 'Encrypted and image-only PDFs are rejected with remediation guidance; filenames are sanitized.'
   performance:
-    status: CONCERNS
-    notes: 'Not assessed; implementation incomplete.'
+    status: PASS
+    notes: 'pypdf processes pages once per run; normalization is linear for resume-sized documents.'
   reliability:
-    status: FAIL
-    notes: 'Pipeline cannot raise PdfExtractionError or map to exit code 3 yet.'
+    status: PASS
+    notes: 'Unit and CLI tests cover success and failure flows; exit code 3 path validated.'
   maintainability:
-    status: FAIL
-    notes: 'Required ingestion package and tests are missing, blocking ongoing maintenance.'
+    status: PASS
+    notes: 'Loader reuses shared utilities and tests cover regressions, supporting ongoing maintenance.'
 recommendations:
-  immediate:
-    - action: 'Implement pdf loader with detection, normalization, and remediation messaging.'
-      refs:
-        - filtra/ingestion/pdf_loader.py
-      suggested_owner: dev
-    - action: 'Add unit/integration coverage for encrypted and image-only PDFs and CLI exit code 3 flow.'
-      refs:
-        - tests/test_pdf_loader.py
-        - tests/test_cli.py
-      suggested_owner: dev
+  immediate: []
   future:
-    - action: 'Document remediation guidance in CLI help once loader ships.'
+    - action: 'Add job-description PDF regression once JD ingestion supports the format.'
       refs:
-        - README.md
-      suggested_owner: po
+        - tests/test_cli.py
+      suggested_owner: qa

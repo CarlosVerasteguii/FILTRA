@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Type
 
-from filtra.exit_codes import ExitCode
 from filtra.errors import (
     FiltraError,
     InputValidationError,
@@ -16,6 +14,8 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
+from filtra.exit_codes import ExitCode
+from filtra.ingestion import extract_text as extract_pdf_text
 from filtra.utils import LoadedDocument, load_text_document
 
 logger = logging.getLogger("filtra.orchestration.runner")
@@ -31,8 +31,8 @@ class ExecutionOutcome:
     remediation: str | None = None
 
 
-_ERROR_MAPPINGS: Tuple[
-    Tuple[Type[FiltraError], ExitCode, str, str | None],
+_ERROR_MAPPINGS: tuple[
+    tuple[type[FiltraError], ExitCode, str, str | None],
     ...,
 ] = (
     (
@@ -72,8 +72,8 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
     """Execute the evaluation orchestration lifecycle."""
 
     try:
-        resume_doc = load_text_document(resume_path, "resume")
-        jd_doc = load_text_document(jd_path, "job description")
+        resume_doc = _load_document(resume_path, description="resume")
+        jd_doc = _load_document(jd_path, description="job description")
         _perform_run(resume_doc=resume_doc, jd_doc=jd_doc)
     except TimeoutExceededError as error:
         return handle_domain_error(error)
@@ -83,7 +83,9 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
         return handle_domain_error(
             TimeoutExceededError(
                 message=str(error) or "Processing timed out while executing the pipeline.",
-                remediation="Retry with a stable network connection or increase the configured timeout.",
+                remediation=(
+                    "Retry with a stable network connection or increase the configured timeout."
+                ),
             )
         )
     except Exception as error:  # pragma: no cover - defensive
@@ -113,6 +115,14 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
         status="success",
         message="\n".join(summary),
     )
+
+
+def _load_document(path: Path, *, description: str) -> LoadedDocument:
+    """Load a resume or job description, supporting both PDF and text formats."""
+
+    if path.suffix.lower() == ".pdf":
+        return extract_pdf_text(path, description=description)
+    return load_text_document(path, description)
 
 
 def _perform_run(*, resume_doc: LoadedDocument, jd_doc: LoadedDocument) -> None:
@@ -156,7 +166,7 @@ def handle_domain_error(error: FiltraError) -> ExecutionOutcome:
     )
 
 
-def _map_error(error: FiltraError) -> Tuple[ExitCode, str, str | None]:
+def _map_error(error: FiltraError) -> tuple[ExitCode, str, str | None]:
     """Match an error instance to its configured exit code and remediation."""
 
     for error_type, exit_code, message, remediation in _ERROR_MAPPINGS:

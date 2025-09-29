@@ -11,6 +11,7 @@ _PREFERRED_ENCODINGS: tuple[str, ...] = ("utf-8-sig", "cp1252")
 _ENCODING_LABELS: dict[str, str] = {
     "utf-8-sig": "UTF-8 (with BOM)",
     "cp1252": "Windows-1252",
+    "utf-8": "UTF-8",
 }
 
 
@@ -64,7 +65,9 @@ def load_text_document(path: Path, description: str) -> LoadedDocument:
     except OSError as exc:  # pragma: no cover - mirrors Path error messaging
         raise InputValidationError(
             message=f"Unable to read the {description} file {format_display_path(path)}.",
-            remediation="Verify file permissions and that the file is not locked by another process.",
+            remediation=(
+                "Verify file permissions and that the file is not locked by another process."
+            ),
         ) from exc
 
     last_error: UnicodeDecodeError | None = None
@@ -92,3 +95,4 @@ __all__ = [
     "load_text_document",
     "normalize_newlines",
 ]
+

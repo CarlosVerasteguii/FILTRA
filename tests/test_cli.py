@@ -15,6 +15,7 @@ from filtra.errors import (
     TimeoutExceededError,
 )
 from filtra.orchestration import HealthCheck, WarmupResult
+from filtra.utils import LoadedDocument
 
 runner = CliRunner(mix_stderr=False)
 
@@ -104,7 +105,7 @@ def test_run_requires_required_options() -> None:
 
 
 def test_run_executes_with_valid_files(tmp_path: Path) -> None:
-    resume = tmp_path / "resume.pdf"
+    resume = tmp_path / "resume.txt"
     resume.write_text("resume")
     jd = tmp_path / "job.txt"
     jd.write_text("jd")
@@ -113,9 +114,57 @@ def test_run_executes_with_valid_files(tmp_path: Path) -> None:
 
     assert result.exit_code == int(ExitCode.SUCCESS)
     output = result.stdout
-    assert "Resume resume.pdf decoded as UTF-8 (with BOM)" in output
+    assert "Resume resume.txt decoded as UTF-8 (with BOM)" in output
     assert "Job description job.txt decoded as UTF-8 (with BOM)" in output
     assert "Pipeline execution is not yet implemented in this scaffold." in output
+
+
+def test_run_accepts_pdf_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    resume = tmp_path / "resume.pdf"
+    resume.write_bytes(b"%PDF")
+    jd = tmp_path / "job.txt"
+    jd.write_text("jd")
+
+    loaded = LoadedDocument(path=resume, text="Resumen normalizado", encoding="utf-8")
+
+    def _load_pdf(path: Path, *, description: str) -> LoadedDocument:
+        assert description == "resume"
+        assert path == resume
+        return loaded
+
+    monkeypatch.setattr("filtra.orchestration.runner.extract_pdf_text", _load_pdf)
+
+    result = runner.invoke(app, ["run", "--resume", str(resume), "--jd", str(jd)])
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    output = result.stdout
+    combined = _normalize(output)
+    assert "Resume resume.pdf decoded as" in combined
+    assert "UTF-8" in combined
+    assert "Pipeline execution is not yet implemented in this scaffold." in output
+
+
+def test_run_reports_pdf_parse_failure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    resume = tmp_path / "resume.pdf"
+    resume.write_bytes(b"%PDF")
+    jd = tmp_path / "job.txt"
+    jd.write_text("jd")
+
+    def _raise(path: Path, *, description: str) -> LoadedDocument:
+        raise PdfExtractionError("Encrypted PDF detected", remediation="Export an unprotected PDF")
+
+    monkeypatch.setattr("filtra.orchestration.runner.extract_pdf_text", _raise)
+
+    result = runner.invoke(
+        app,
+        ["run", "--resume", str(resume), "--jd", str(jd)],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == int(ExitCode.PARSE_ERROR)
+    combined = _normalize(result.stdout + result.stderr)
+    assert "Encrypted PDF detected" in combined
+    assert "Remediation" in combined
 
 def test_run_reports_windows_sample_encodings(windows_samples: tuple[Path, Path]) -> None:
     resume, jd = windows_samples
@@ -128,7 +177,7 @@ def test_run_reports_windows_sample_encodings(windows_samples: tuple[Path, Path]
     assert "Job description jd_windows_sample.txt decoded as Windows-1252" in output
 
 def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
-    resume = tmp_path / "resume.pdf"
+    resume = tmp_path / "resume.txt"
     resume.write_text("resume")
     jd = tmp_path / "job.txt"
     jd.write_text("jd")
@@ -145,7 +194,7 @@ def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
 def test_run_handles_input_validation_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    resume = tmp_path / "resume.pdf"
+    resume = tmp_path / "resume.txt"
     resume.write_text("resume")
     jd = tmp_path / "jd.txt"
     jd.write_text("jd")
@@ -199,7 +248,7 @@ def test_run_maps_domain_errors(
     expected_code: ExitCode,
     expected_message: str,
 ) -> None:
-    resume = tmp_path / "resume.pdf"
+    resume = tmp_path / "resume.txt"
     resume.write_text("resume")
     jd = tmp_path / "jd.txt"
     jd.write_text("jd")
