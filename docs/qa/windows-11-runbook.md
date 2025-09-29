@@ -35,6 +35,6 @@ This runbook captures the manual validation required to prove Filtra operates sm
    - If issues arise, file them with logs and attach this runbook as supporting evidence.
 
 ## Execution Log
-| Date | Operator | Outcome | Notes |
-| ---- | -------- | ------- | ----- |
-| YYYY-MM-DD | name | PASS/FAIL | e.g., cache size, timings, remediation applied |
+| Date       | Operator | Outcome | Notes                                                                                                                                                                                                                              |
+| ---------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2025-09-27 | carlosh  | FAIL    | Health diagnosis failed (OpenRouter API Key and Proxy not configured). Warm-up script failed (--quiet not recognized, API Key missing). Sample files (samples/inputs) not found. Command `filtra run` failed due to missing files. |
