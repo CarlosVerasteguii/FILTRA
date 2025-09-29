@@ -1,0 +1,7 @@
+# Filtra Windows Job Description Sample
+# Encoding: Windows-1252 (ANSI)
+# Purpose: Exercise cp1252 fallback detection during Windows verification.
+# Usage: Copiar junto con la hoja de vida y ejecutar `python -m filtra run`.
+Título: Analista de Datos Senior
+Ubicación: Ciudad de México, México
+Descripción: Requisición enfocada en extracción de entidades y soporte a equipos bilingües.

@@ -39,10 +39,10 @@ python -m filtra --health
 python -m filtra run --help
 
 # Execute a comparison run
-python -m filtra run --resume "./samples/inputs/resume_sample.pdf" --jd "./samples/inputs/jd_sample.txt"
+python -m filtra run --resume "./samples/inputs/resume_windows_sample.txt" --jd "./samples/inputs/jd_windows_sample.txt"
 
 # Run quietly, emitting only warnings and errors
-python -m filtra --quiet run --resume "./samples/inputs/resume_sample.pdf" --jd "./samples/inputs/jd_sample.txt"
+python -m filtra --quiet run --resume "./samples/inputs/resume_windows_sample.txt" --jd "./samples/inputs/jd_windows_sample.txt"
 
 # Prime model cache and verify OpenRouter connectivity
 python -m filtra warm-up
@@ -107,13 +107,13 @@ The following checklist confirms Filtra runs end-to-end on a clean Windows 11 Po
    ```powershell
    $target = Join-Path $env:USERPROFILE 'Documents\Filtra Samples'
    New-Item -ItemType Directory -Path $target -Force | Out-Null
-   Copy-Item .\samples\inputs\resume_sample.pdf "$target\resume sample.pdf"
-   Copy-Item .\samples\inputs\jd_sample.txt "$target\jd sample.txt"
-   python -m filtra run --resume "$target\resume sample.pdf" --jd "$target\jd sample.txt"
+   Copy-Item .\samples\inputs\resume_windows_sample.txt "$target\resume sample.txt"
+   Copy-Item .\samples\inputs\jd_windows_sample.txt "$target\jd sample.txt"
+   python -m filtra run --resume "$target\resume sample.txt" --jd "$target\jd sample.txt"
    ```
-   The output should report each file name in quotes, list the detected encodings, and only use `
+   Expect the output to quote each filename, report `UTF-8 (with BOM)` for the resume sample and `Windows-1252` for the job description, and only use `
 ` newlines.
-5. Open the copied job description in Notepad, save it with **ANSI** encoding, and rerun the command to confirm Windows-1252 fallback still succeeds.
+5. Open the copied job description (now stored as `jd sample.txt`) in Notepad, re-save it with **ANSI** encoding, and rerun the command to confirm the Windows-1252 fallback still succeeds after manual edits.
 6. Record the run results, durations, and any deviations in `docs/qa/windows-11-runbook.md` for traceability.
 
 ## Repository Bootstrap Checklist

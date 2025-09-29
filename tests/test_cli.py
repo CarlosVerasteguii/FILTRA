@@ -35,6 +35,27 @@ def reset_logging_state() -> None:
     configure_logging._level = logging.INFO  # type: ignore[attr-defined]
 
 
+@pytest.fixture
+def windows_samples(tmp_path: Path) -> tuple[Path, Path]:
+    """Copy the bundled Windows samples into a temporary path with spaces."""
+
+    project_root = Path(__file__).resolve().parents[1]
+    samples_dir = project_root / "samples" / "inputs"
+    resume_src = samples_dir / "resume_windows_sample.txt"
+    jd_src = samples_dir / "jd_windows_sample.txt"
+    assert resume_src.exists(), "resume_windows_sample.txt missing from repository"
+    assert jd_src.exists(), "jd_windows_sample.txt missing from repository"
+
+    target_dir = tmp_path / "Windows Samples"
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    resume_dst = target_dir / resume_src.name
+    jd_dst = target_dir / jd_src.name
+    resume_dst.write_bytes(resume_src.read_bytes())
+    jd_dst.write_bytes(jd_src.read_bytes())
+    return resume_dst, jd_dst
+
+
 def _normalize(output: str) -> str:
     """Collapse whitespace to simplify assertions across Rich formatting."""
 
@@ -96,6 +117,15 @@ def test_run_executes_with_valid_files(tmp_path: Path) -> None:
     assert "Job description job.txt decoded as UTF-8 (with BOM)" in output
     assert "Pipeline execution is not yet implemented in this scaffold." in output
 
+def test_run_reports_windows_sample_encodings(windows_samples: tuple[Path, Path]) -> None:
+    resume, jd = windows_samples
+
+    result = runner.invoke(app, ["run", "--resume", str(resume), "--jd", str(jd)])
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    output = result.stdout
+    assert "Resume resume_windows_sample.txt decoded as UTF-8 (with BOM)" in output
+    assert "Job description jd_windows_sample.txt decoded as Windows-1252" in output
 
 def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
     resume = tmp_path / "resume.pdf"
@@ -313,3 +343,4 @@ def test_run_handles_paths_with_spaces_and_normalizes_newlines(tmp_path: Path) -
     assert '"resume spaced.txt"' in output
     assert '"job desc.txt"' in output
     assert "\r" not in output
+

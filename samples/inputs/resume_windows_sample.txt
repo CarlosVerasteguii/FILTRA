@@ -1,0 +1,7 @@
+﻿# Filtra Windows Resume Sample
+# Encoding: UTF-8 with BOM (utf-8-sig)
+# Purpose: Validate Windows-friendly CLI paths and encoding detection.
+# Usage: Copy into a directory with spaces and run `python -m filtra run`.
+Nombre: Elena García
+Ubicación: Bogotá, Colombia
+Resumen: Especialista en ciencia de datos enfocada en NER multilingüe.

@@ -41,8 +41,8 @@ project-root/
 │       └── language.py          # Locale detection & spanish defaults
 ├── samples/
 │   ├── inputs/
-│   │   ├── resume_sample.pdf
-│   │   └── jd_sample.txt
+│   │   ├── resume_windows_sample.txt
+│   │   └── jd_windows_sample.txt
 │   └── expected/
 │       └── sample_report.json
 ├── tests/

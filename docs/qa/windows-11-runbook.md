@@ -22,14 +22,14 @@ This runbook captures the manual validation required to prove Filtra operates sm
      ```powershell
      $target = Join-Path $env:USERPROFILE 'Documents\Filtra Samples'
      New-Item -ItemType Directory -Path $target -Force | Out-Null
-     Copy-Item .\samples\inputs\resume_sample.pdf "$target\resume sample.pdf"
-     Copy-Item .\samples\inputs\jd_sample.txt "$target\jd sample.txt"
+     Copy-Item .\samples\inputs\resume_windows_sample.txt "$target\resume sample.txt"
+     Copy-Item .\samples\inputs\jd_windows_sample.txt "$target\jd sample.txt"
      ```
-   - Run `python -m filtra run --resume "$target\resume sample.pdf" --jd "$target\jd sample.txt"`.
-   - Verify the CLI output quotes each filename, reports the detected encodings, and uses only `\n` newlines.
+   - Run `python -m filtra run --resume "$target\resume sample.txt" --jd "$target\jd sample.txt"`.
+   - Verify the CLI output quotes each filename, reports `UTF-8 (with BOM)` for the resume sample and `Windows-1252` for the job description, and uses only `\n` newlines.
 5. **Windows-1252 fallback**
-   - Edit the copied job description in Notepad and save it using **ANSI** encoding.
-   - Rerun the CLI command and confirm the output now reports `Windows-1252` for the job description while succeeding.
+   - The job description sample already ships as Windows-1252. Open `jd sample.txt` in Notepad, make a minor edit, and re-save with **ANSI** to confirm the fallback persists after manual changes.
+   - Rerun the CLI command and confirm the output reports `Windows-1252` for the job description while succeeding.
 6. **Result capture**
    - Record timestamps, observed outputs, and any deviations or remediation steps applied.
    - If issues arise, file them with logs and attach this runbook as supporting evidence.
