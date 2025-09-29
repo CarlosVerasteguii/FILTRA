@@ -1,0 +1,42 @@
+schema: 1
+story: '2.2'
+story_title: 'Story 2.2: Multilingual NER (CPU-only)'
+gate: PASS
+status_reason: 'CLI flag validation and bilingual fixtures landed; remaining follow-ups are minor housekeeping.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-29T19:58:07Z'
+
+top_issues: []
+
+waiver:
+  active: false
+
+quality_score: 100
+expires: '2025-10-13T00:00:00Z'
+
+evidence:
+  tests_reviewed: 38
+  risks_identified: 1
+  trace:
+    ac_covered: [1, 2, 3]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Proxy variables logged without exposing secrets; no new egress.'
+  performance:
+    status: PASS
+    notes: 'Pipeline still rebuilt each call; acceptable for CPU MVP but monitor.'
+  reliability:
+    status: PASS
+    notes: 'Cache path and proxy diagnostics verified; smoke hook available for real model.'
+  maintainability:
+    status: PASS
+    notes: 'Custom integration mark registered in pyproject; maintainers get clean test output.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Explore reusing a cached transformers pipeline instance once orchestration stabilises.'
+      refs: ['filtra/ner/pipeline.py']

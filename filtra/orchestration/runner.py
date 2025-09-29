@@ -14,6 +14,8 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
+from filtra.ner import ExtractedEntityCollection, extract_entities
+from filtra.orchestration.diagnostics import get_proxy_environment, resolve_cache_directory
 from filtra.exit_codes import ExitCode
 from filtra.ingestion import extract_text as extract_pdf_text
 from filtra.utils import LoadedDocument, load_text_document
@@ -68,13 +70,17 @@ _ERROR_MAPPINGS: tuple[
 )
 
 
-def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
+def run_pipeline(resume_path: Path, jd_path: Path, *, ner_model: str) -> ExecutionOutcome:
     """Execute the evaluation orchestration lifecycle."""
 
     try:
         resume_doc = _load_document(resume_path, description="resume")
         jd_doc = _load_document(jd_path, description="job description")
-        _perform_run(resume_doc=resume_doc, jd_doc=jd_doc)
+        entities, cache_path = _perform_run(
+            resume_doc=resume_doc,
+            jd_doc=jd_doc,
+            ner_model=ner_model,
+        )
     except TimeoutExceededError as error:
         return handle_domain_error(error)
     except FiltraError as error:
@@ -107,6 +113,10 @@ def run_pipeline(resume_path: Path, jd_path: Path) -> ExecutionOutcome:
             f"Job description {jd_doc.display_name} decoded as {jd_doc.display_encoding} "
             f"({len(jd_doc.text)} characters)."
         ),
+        (
+            f"Extracted {len(entities.entities)} entities using {ner_model} "
+            f"(cache {cache_path})."
+        ),
         "Pipeline execution is not yet implemented in this scaffold.",
     ]
 
@@ -125,7 +135,12 @@ def _load_document(path: Path, *, description: str) -> LoadedDocument:
     return load_text_document(path, description)
 
 
-def _perform_run(*, resume_doc: LoadedDocument, jd_doc: LoadedDocument) -> None:
+def _perform_run(
+    *,
+    resume_doc: LoadedDocument,
+    jd_doc: LoadedDocument,
+    ner_model: str,
+) -> tuple[ExtractedEntityCollection, Path]:
     """Actual orchestration logic placeholder until the pipeline is wired in."""
 
     logger.info(
@@ -133,6 +148,7 @@ def _perform_run(*, resume_doc: LoadedDocument, jd_doc: LoadedDocument) -> None:
         extra={
             "resume": resume_doc.display_name,
             "jd": jd_doc.display_name,
+            "ner_model": ner_model,
         },
     )
     logger.info(
@@ -144,7 +160,36 @@ def _perform_run(*, resume_doc: LoadedDocument, jd_doc: LoadedDocument) -> None:
             "jd_chars": len(jd_doc.text),
         },
     )
+
+    cache_path = resolve_cache_directory()
+    logger.info(
+        "Resolved Hugging Face cache path",
+        extra={"huggingface_cache": str(cache_path)},
+    )
+
+    proxy_environment = get_proxy_environment()
+    logger.info(
+        "Proxy environment detected",
+        extra={f"proxy_{name.lower()}": bool(value) for name, value in proxy_environment.items()},
+    )
+
+    entities = extract_entities(
+        text=resume_doc.text,
+        language_hint=None,
+        model_id=ner_model,
+        cache_path=cache_path,
+    )
+
+    logger.info(
+        "Extracted entities",
+        extra={
+            "entity_count": len(entities.entities),
+            "entity_categories": sorted({entity.category for entity in entities.entities}),
+        },
+    )
+
     logger.info("Pipeline execution is not yet implemented in this scaffold.")
+    return entities, cache_path
 
 
 def handle_domain_error(error: FiltraError) -> ExecutionOutcome:

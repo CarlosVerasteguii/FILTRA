@@ -9,6 +9,7 @@ from rich.logging import RichHandler
 from . import FiltraError, __version__
 from .errors import InputValidationError
 from .exit_codes import ExitCode
+from .ner import DEFAULT_MODEL_ID
 from .orchestration import (
     HealthReport,
     WarmupResult,
@@ -80,6 +81,18 @@ def _validate_file(path: Path, description: str) -> Path:
             remediation=f"Verify the {description} path and ensure the file is readable.",
         )
     return resolved
+
+
+def _validate_model_id(model_id: str) -> str:
+    """Ensure the provided NER model identifier is non-empty."""
+
+    value = (model_id or "").strip()
+    if not value:
+        raise InputValidationError(
+            message="NER model identifier cannot be empty.",
+            remediation="Pass a valid Hugging Face repo using --ner-model.",
+        )
+    return value
 
 
 def _is_quiet_mode() -> bool:
@@ -228,6 +241,12 @@ def run(
         readable=True,
         help="Path to the job description file.",
     ),
+    ner_model: str = typer.Option(
+        DEFAULT_MODEL_ID,
+        "--ner-model",
+        help="Hugging Face model identifier for entity extraction.",
+        show_default=True,
+    ),
 ) -> None:
     """Execute the resume vs job description evaluation pipeline."""
 
@@ -236,6 +255,7 @@ def run(
     try:
         resume_path = _validate_file(resume, "resume")
         jd_path = _validate_file(jd, "job description")
+        resolved_model = _validate_model_id(ner_model)
     except InputValidationError as exc:
         logger.error(str(exc))
         if exc.remediation:
@@ -248,7 +268,11 @@ def run(
             logger.error("Remediation: %s", remediation)
         raise typer.Exit(code=int(ExitCode.UNEXPECTED_ERROR)) from exc
 
-    outcome = run_pipeline(resume_path=resume_path, jd_path=jd_path)
+    outcome = run_pipeline(
+        resume_path=resume_path,
+        jd_path=jd_path,
+        ner_model=resolved_model,
+    )
 
     if outcome.message and not _is_quiet_mode():
         typer.echo(outcome.message)

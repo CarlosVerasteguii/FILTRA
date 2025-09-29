@@ -34,4 +34,7 @@ show_missing = true
 addopts = "-ra"
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "integration: tests that hit real models or slower external resources",
+]
 

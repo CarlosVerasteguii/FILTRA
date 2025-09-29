@@ -61,7 +61,7 @@ def run_warmup(
     proxy_check = check_proxy_configuration()
 
     cache_path = resolve_cache_directory()
-    logger.info("Resolved cache path", extra={"path": str(cache_path)})
+    logger.info("Resolved cache path", extra={"huggingface_cache": str(cache_path)})
     warm_cache(cache_path=cache_path, model_id=model_id)
     cache_size = _compute_cache_size(cache_path)
 

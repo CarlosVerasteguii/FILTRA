@@ -14,7 +14,8 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
-from filtra.orchestration import HealthCheck, WarmupResult
+from filtra.ner import ExtractedEntity, ExtractedEntityCollection
+from filtra.orchestration import ExecutionOutcome, HealthCheck, WarmupResult
 from filtra.utils import LoadedDocument
 
 runner = CliRunner(mix_stderr=False)
@@ -34,6 +35,35 @@ def reset_logging_state() -> None:
     root.setLevel(logging.NOTSET)
     configure_logging._configured = False  # type: ignore[attr-defined]
     configure_logging._level = logging.INFO  # type: ignore[attr-defined]
+
+
+@pytest.fixture(autouse=True)
+def stub_ner_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid real model downloads during CLI tests by stubbing the extractor."""
+
+    def _fake_extract_entities(**kwargs: object) -> ExtractedEntityCollection:
+        language = (kwargs.get("language_hint") or "und").lower()
+        return ExtractedEntityCollection(
+            entities=(
+                ExtractedEntity(
+                    text="Filtra Technologies",
+                    category="company",
+                    confidence=0.99,
+                    span=(0, 19),
+                    source_language=language,
+                ),
+                ExtractedEntity(
+                    text="Python",
+                    category="skill",
+                    confidence=0.95,
+                    span=(20, 26),
+                    source_language=language,
+                ),
+            ),
+            language_profile=language,
+        )
+
+    monkeypatch.setattr("filtra.orchestration.runner.extract_entities", _fake_extract_entities)
 
 
 @pytest.fixture
@@ -216,6 +246,69 @@ def test_run_handles_input_validation_error(
     assert "Provide correct files" in combined
 
 
+def test_run_accepts_custom_ner_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("resume")
+    jd = tmp_path / "job.txt"
+    jd.write_text("jd")
+
+    recorded: dict[str, object] = {}
+
+    def _fake_run_pipeline(*, resume_path: Path, jd_path: Path, ner_model: str) -> ExecutionOutcome:
+        recorded["resume"] = resume_path
+        recorded["jd"] = jd_path
+        recorded["ner_model"] = ner_model
+        return ExecutionOutcome(exit_code=ExitCode.SUCCESS, status="success", message="ok")
+
+    monkeypatch.setattr("filtra.cli.run_pipeline", _fake_run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--resume",
+            str(resume),
+            "--jd",
+            str(jd),
+            "--ner-model",
+            "custom/company-ner",
+        ],
+    )
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    assert recorded["ner_model"] == "custom/company-ner"
+    assert recorded["resume"] == resume.resolve()
+    assert recorded["jd"] == jd.resolve()
+
+
+def test_run_rejects_empty_ner_model(tmp_path: Path) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("resume")
+    jd = tmp_path / "job.txt"
+    jd.write_text("jd")
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--resume",
+            str(resume),
+            "--jd",
+            str(jd),
+            "--ner-model",
+            "",
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == int(ExitCode.INVALID_INPUT)
+    combined = _normalize(result.stdout + result.stderr)
+    assert "NER model identifier cannot be empty." in combined
+
+
 @pytest.mark.parametrize(
     ("error_factory", "expected_code", "expected_message"),
     [
@@ -253,7 +346,7 @@ def test_run_maps_domain_errors(
     jd = tmp_path / "jd.txt"
     jd.write_text("jd")
 
-    def _raise_error(*, resume_doc, jd_doc) -> None:
+    def _raise_error(*, resume_doc, jd_doc, ner_model: str) -> None:
         raise error_factory()
 
     monkeypatch.setattr("filtra.orchestration.runner._perform_run", _raise_error)
