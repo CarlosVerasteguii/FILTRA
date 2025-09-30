@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from filtra.configuration import AliasMapDetails
 from filtra.cli import ExitCode, app, configure_logging
 from filtra.errors import (
     InputValidationError,
@@ -95,8 +96,19 @@ def _normalize(output: str) -> str:
 
 def _warmup_result() -> WarmupResult:
     cache_path = Path("C:/cache/filtra/models")
+    alias_details = AliasMapDetails(
+        sources=(Path("config/alias_map.yaml"),),
+        canonical_count=3,
+        alias_count=6,
+        locale_codes=("es",),
+    )
     checks = (
         HealthCheck(name="Python runtime", status="PASS", detail="Detected Python 3.10.11."),
+        HealthCheck(
+            name="Alias map configuration",
+            status="PASS",
+            detail="3 groups, 6 aliases (locales: es; sources: config/alias_map.yaml).",
+        ),
         HealthCheck(
             name="OpenRouter connectivity",
             status="PASS",
@@ -113,6 +125,7 @@ def _warmup_result() -> WarmupResult:
             "HTTP_PROXY": None,
             "NO_PROXY": "localhost",
         },
+        alias_map_details=alias_details,
         checks=checks,
     )
 
@@ -257,10 +270,11 @@ def test_run_accepts_custom_ner_model(
 
     recorded: dict[str, object] = {}
 
-    def _fake_run_pipeline(*, resume_path: Path, jd_path: Path, ner_model: str) -> ExecutionOutcome:
-        recorded["resume"] = resume_path
-        recorded["jd"] = jd_path
-        recorded["ner_model"] = ner_model
+    def _fake_run_pipeline(**kwargs: object) -> ExecutionOutcome:
+        recorded["resume"] = kwargs.get("resume_path")
+        recorded["jd"] = kwargs.get("jd_path")
+        recorded["ner_model"] = kwargs.get("ner_model")
+        recorded["alias_map_paths"] = kwargs.get("alias_map_paths")
         return ExecutionOutcome(exit_code=ExitCode.SUCCESS, status="success", message="ok")
 
     monkeypatch.setattr("filtra.cli.run_pipeline", _fake_run_pipeline)
@@ -346,7 +360,7 @@ def test_run_maps_domain_errors(
     jd = tmp_path / "jd.txt"
     jd.write_text("jd")
 
-    def _raise_error(*, resume_doc, jd_doc, ner_model: str) -> None:
+    def _raise_error(**kwargs: object) -> None:
         raise error_factory()
 
     monkeypatch.setattr("filtra.orchestration.runner._perform_run", _raise_error)
@@ -404,7 +418,7 @@ def test_health_flag_reports_failures(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
 
 def test_warmup_command_renders_summary(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("filtra.cli.run_warmup", lambda: _warmup_result())
+    monkeypatch.setattr("filtra.cli.run_warmup", lambda *_, **__: _warmup_result())
 
     result = runner.invoke(app, ["warm-up"], catch_exceptions=False)
 
@@ -412,12 +426,15 @@ def test_warmup_command_renders_summary(monkeypatch: pytest.MonkeyPatch) -> None
     combined = _normalize(result.stdout)
     assert "Filtra warm-up diagnostics" in combined
     assert "Cache on disk" in combined
+    assert "Alias map sources" in combined
+    assert "Alias map coverage" in combined
     assert "2.0 KiB" in combined
+    assert "[PASS] Alias map configuration" in combined
     assert "[PASS] OpenRouter connectivity" in combined
 
 
 def test_warmup_command_respects_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("filtra.cli.run_warmup", lambda: _warmup_result())
+    monkeypatch.setattr("filtra.cli.run_warmup", lambda *_, **__: _warmup_result())
 
     result = runner.invoke(app, ["--quiet", "warm-up"], catch_exceptions=False)
 
@@ -425,6 +442,8 @@ def test_warmup_command_respects_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
     combined = _normalize(result.stdout)
     assert "Proxy environment" not in combined
     assert "Warm-up PASS" in combined
+    assert "alias map" in combined.lower()
+    assert "[PASS] Alias map configuration" in combined
     assert "[PASS] OpenRouter connectivity" in combined
 
 
@@ -432,7 +451,7 @@ def test_warmup_command_maps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     def _raise() -> None:
         raise LLMRequestError("Gateway unavailable", remediation="Set OPENROUTER_API_KEY")
 
-    monkeypatch.setattr("filtra.cli.run_warmup", _raise)
+    monkeypatch.setattr("filtra.cli.run_warmup", lambda *_, **__: _raise())
 
     result = runner.invoke(app, ["warm-up"], catch_exceptions=False)
 
@@ -486,3 +505,38 @@ def test_run_handles_paths_with_spaces_and_normalizes_newlines(tmp_path: Path) -
     assert '"job desc.txt"' in output
     assert "\r" not in output
 
+
+def test_run_accepts_alias_map_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("perfil", encoding="utf-8")
+    jd = tmp_path / "job.txt"
+    jd.write_text("rol", encoding="utf-8")
+    alias_file = tmp_path / "alias-map.yaml"
+    alias_file.write_text("aliases: {}\n", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def _run_pipeline(**kwargs: object) -> ExecutionOutcome:
+        captured["alias_map_paths"] = kwargs.get("alias_map_paths")
+        return ExecutionOutcome(exit_code=ExitCode.SUCCESS, status="success", message=None)
+
+    monkeypatch.setattr("filtra.cli.run_pipeline", _run_pipeline)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--resume",
+            str(resume),
+            "--jd",
+            str(jd),
+            "--alias-map",
+            str(alias_file),
+        ],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    resolved_paths = captured.get("alias_map_paths")
+    assert isinstance(resolved_paths, list)
+    assert alias_file.resolve() in resolved_paths

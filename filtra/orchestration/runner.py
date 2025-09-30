@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
+from filtra.configuration import AliasMapDetails, load_alias_map
 from filtra.errors import (
     FiltraError,
     InputValidationError,
@@ -14,7 +16,7 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
-from filtra.ner import ExtractedEntityCollection, extract_entities
+from filtra.ner import ExtractedEntityCollection, extract_entities, normalize_entities
 from filtra.orchestration.diagnostics import get_proxy_environment, resolve_cache_directory
 from filtra.exit_codes import ExitCode
 from filtra.ingestion import extract_text as extract_pdf_text
@@ -70,16 +72,23 @@ _ERROR_MAPPINGS: tuple[
 )
 
 
-def run_pipeline(resume_path: Path, jd_path: Path, *, ner_model: str) -> ExecutionOutcome:
+def run_pipeline(
+    resume_path: Path,
+    jd_path: Path,
+    *,
+    ner_model: str,
+    alias_map_paths: Sequence[Path] | None = None,
+) -> ExecutionOutcome:
     """Execute the evaluation orchestration lifecycle."""
 
     try:
         resume_doc = _load_document(resume_path, description="resume")
         jd_doc = _load_document(jd_path, description="job description")
-        entities, cache_path = _perform_run(
+        normalized_entities, cache_path, alias_details, raw_count = _perform_run(
             resume_doc=resume_doc,
             jd_doc=jd_doc,
             ner_model=ner_model,
+            alias_map_paths=alias_map_paths,
         )
     except TimeoutExceededError as error:
         return handle_domain_error(error)
@@ -114,8 +123,17 @@ def run_pipeline(resume_path: Path, jd_path: Path, *, ner_model: str) -> Executi
             f"({len(jd_doc.text)} characters)."
         ),
         (
-            f"Extracted {len(entities.entities)} entities using {ner_model} "
+            f"Extracted {raw_count} entities using {ner_model} "
             f"(cache {cache_path})."
+        ),
+        (
+            "Normalised {canonical} canonical entities via {groups} alias groups "
+            "({aliases} aliases; overrides: {locales})."
+        ).format(
+            canonical=len(normalized_entities.entities),
+            groups=alias_details.canonical_count,
+            aliases=alias_details.alias_count,
+            locales=", ".join(alias_details.locale_codes or ("none",)),
         ),
         "Pipeline execution is not yet implemented in this scaffold.",
     ]
@@ -140,7 +158,8 @@ def _perform_run(
     resume_doc: LoadedDocument,
     jd_doc: LoadedDocument,
     ner_model: str,
-) -> tuple[ExtractedEntityCollection, Path]:
+    alias_map_paths: Sequence[Path] | None,
+) -> tuple[ExtractedEntityCollection, Path, AliasMapDetails, int]:
     """Actual orchestration logic placeholder until the pipeline is wired in."""
 
     logger.info(
@@ -180,16 +199,38 @@ def _perform_run(
         cache_path=cache_path,
     )
 
+    raw_count = len(entities.entities)
     logger.info(
         "Extracted entities",
         extra={
-            "entity_count": len(entities.entities),
+            "entity_count": raw_count,
             "entity_categories": sorted({entity.category for entity in entities.entities}),
         },
     )
 
+    alias_map = load_alias_map(alias_map_paths)
+    alias_details = alias_map.details()
+    logger.info(
+        "Loaded alias map",
+        extra={
+            "alias_map_sources": [str(path) for path in alias_details.sources],
+            "alias_map_groups": alias_details.canonical_count,
+            "alias_map_aliases": alias_details.alias_count,
+            "alias_map_locales": alias_details.locale_codes,
+        },
+    )
+
+    normalized = normalize_entities(entities, alias_map=alias_map)
+    logger.info(
+        "Normalised entities",
+        extra={
+            "raw_entity_count": raw_count,
+            "canonical_entity_count": len(normalized.entities),
+        },
+    )
+
     logger.info("Pipeline execution is not yet implemented in this scaffold.")
-    return entities, cache_path
+    return normalized, cache_path, alias_details, raw_count
 
 
 def handle_domain_error(error: FiltraError) -> ExecutionOutcome:

@@ -10,6 +10,8 @@ from .pipeline import (
     warm_cache,
 )
 
+from .normalization import normalize_entities
+
 __all__ = [
     "DEFAULT_MODEL_ID",
     "EntityCategory",
@@ -17,4 +19,7 @@ __all__ = [
     "ExtractedEntityCollection",
     "extract_entities",
     "warm_cache",
+    "normalize_entities",
 ]
+
+

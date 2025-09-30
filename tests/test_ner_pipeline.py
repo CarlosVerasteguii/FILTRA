@@ -177,9 +177,13 @@ def test_run_pipeline_logs_cache_and_proxy_environment(
 
     assert outcome.exit_code == ExitCode.SUCCESS
     assert str(cache_path) in outcome.message
+    assert "Normalised" in outcome.message
+    assert "alias groups" in outcome.message
 
     runner_records = [record for record in caplog.records if record.name == "filtra.orchestration.runner"]
     assert any(record.__dict__.get("huggingface_cache") == str(cache_path) for record in runner_records)
     assert any(record.__dict__.get("proxy_https_proxy") is True for record in runner_records)
     assert any(record.__dict__.get("proxy_http_proxy") is False for record in runner_records)
     assert any(record.__dict__.get("proxy_no_proxy") is True for record in runner_records)
+    assert any(getattr(record, "alias_map_groups", None) is not None for record in runner_records)
+    assert any(getattr(record, "alias_map_aliases", None) is not None for record in runner_records)

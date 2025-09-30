@@ -136,11 +136,13 @@ def _render_warmup_result(result: WarmupResult, *, quiet: bool) -> None:
     """Present warm-up diagnostics while respecting quiet mode expectations."""
 
     cache_summary = _format_bytes(result.cache_size_bytes)
+    alias_details = result.alias_map_details
+    alias_summary = f"alias map {alias_details.canonical_count} groups"
 
     if quiet:
         typer.echo(
             f"Warm-up {result.overall_status} in {result.duration_seconds:.2f}s; "
-            f"cache {cache_summary}"
+            f"cache {cache_summary}; {alias_summary}"
         )
         for check in result.checks:
             typer.echo(f"[{check.status}] {check.name}")
@@ -151,6 +153,14 @@ def _render_warmup_result(result: WarmupResult, *, quiet: bool) -> None:
     typer.echo(f"Model cache folder : {result.huggingface_cache}")
     typer.echo(f"Cache on disk      : {cache_summary}")
     typer.echo(f"Duration           : {result.duration_seconds:.2f}s")
+    typer.echo(
+        f"Alias map sources  : {', '.join(str(path) for path in alias_details.sources)}"
+    )
+    typer.echo(
+        "Alias map coverage : "
+        f"{alias_details.canonical_count} groups / {alias_details.alias_count} aliases "
+        f"(locales: {', '.join(alias_details.locale_codes or ('none',))})"
+    )
 
     typer.echo("")
     typer.echo("Proxy environment:")
@@ -247,6 +257,16 @@ def run(
         help="Hugging Face model identifier for entity extraction.",
         show_default=True,
     ),
+    alias_map: list[Path] = typer.Option(
+        [],
+        "--alias-map",
+        "-a",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Additional alias map YAML files to merge (pass multiple times).",
+    ),
 ) -> None:
     """Execute the resume vs job description evaluation pipeline."""
 
@@ -256,6 +276,7 @@ def run(
         resume_path = _validate_file(resume, "resume")
         jd_path = _validate_file(jd, "job description")
         resolved_model = _validate_model_id(ner_model)
+        alias_paths = [_validate_file(path, "alias map") for path in alias_map]
     except InputValidationError as exc:
         logger.error(str(exc))
         if exc.remediation:
@@ -272,6 +293,7 @@ def run(
         resume_path=resume_path,
         jd_path=jd_path,
         ner_model=resolved_model,
+        alias_map_paths=alias_paths,
     )
 
     if outcome.message and not _is_quiet_mode():
@@ -281,13 +303,25 @@ def run(
 
 
 @app.command("warm-up")
-def warm_up() -> None:
+def warm_up(
+    alias_map: list[Path] = typer.Option(
+        [],
+        "--alias-map",
+        "-a",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        help="Additional alias map YAML files to validate during warm-up (pass multiple times).",
+    ),
+) -> None:
     """Prime model caches and verify external service connectivity."""
 
     logger = logging.getLogger("filtra.cli")
 
     try:
-        result = run_warmup()
+        alias_paths = [_validate_file(path, "alias map") for path in alias_map]
+        result = run_warmup(alias_map_paths=alias_paths)
     except FiltraError as exc:
         outcome = handle_domain_error(exc)
         raise typer.Exit(code=int(outcome.exit_code)) from exc

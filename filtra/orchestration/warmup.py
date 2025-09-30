@@ -5,10 +5,11 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Tuple
+from typing import Mapping, Sequence, Tuple
 
 import httpx
 
+from filtra.configuration import AliasMapDetails, load_alias_map
 from filtra.errors import TimeoutExceededError
 from filtra.llm import LLMHealth, perform_health_check
 from filtra.ner import DEFAULT_MODEL_ID, warm_cache
@@ -36,6 +37,7 @@ class WarmupResult:
     cache_size_bytes: int
     duration_seconds: float
     proxy_environment: Mapping[str, str | None]
+    alias_map_details: AliasMapDetails
     checks: Tuple[HealthCheck, ...]
 
     @property
@@ -49,6 +51,7 @@ def run_warmup(
     *,
     model_id: str = DEFAULT_MODEL_ID,
     max_duration_seconds: float = 120.0,
+    alias_map_paths: Sequence[Path] | None = None,
     transport: httpx.BaseTransport | None = None,
 ) -> WarmupResult:
     """Execute the warm-up workflow to prime external dependencies."""
@@ -64,6 +67,29 @@ def run_warmup(
     logger.info("Resolved cache path", extra={"huggingface_cache": str(cache_path)})
     warm_cache(cache_path=cache_path, model_id=model_id)
     cache_size = _compute_cache_size(cache_path)
+
+    alias_map = load_alias_map(alias_map_paths)
+    alias_details = alias_map.details()
+    locale_display = ", ".join(alias_details.locale_codes or ("none",))
+    sources_display = ", ".join(str(path) for path in alias_details.sources)
+    logger.info(
+        "Alias map ready",
+        extra={
+            "alias_map_sources": [str(path) for path in alias_details.sources],
+            "alias_map_groups": alias_details.canonical_count,
+            "alias_map_aliases": alias_details.alias_count,
+            "alias_map_locales": alias_details.locale_codes,
+        },
+    )
+
+    alias_check = HealthCheck(
+        name="Alias map configuration",
+        status="PASS",
+        detail=(
+            f"{alias_details.canonical_count} groups, {alias_details.alias_count} aliases "
+            f"(locales: {locale_display}; sources: {sources_display})."
+        ),
+    )
 
     ner_check = HealthCheck(
         name="NER model cache",
@@ -108,6 +134,7 @@ def run_warmup(
         python_check,
         api_key_check,
         proxy_check,
+        alias_check,
         ner_check,
         llm_check,
         duration_check,
@@ -119,6 +146,7 @@ def run_warmup(
         cache_size_bytes=cache_size,
         duration_seconds=duration,
         proxy_environment=get_proxy_environment(),
+        alias_map_details=alias_details,
         checks=checks,
     )
 

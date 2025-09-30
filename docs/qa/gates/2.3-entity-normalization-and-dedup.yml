@@ -1,0 +1,40 @@
+schema: 1
+story: '2.3'
+story_title: 'Entity Normalization & Dedup'
+gate: PASS
+status_reason: 'Alias map collision guards and sanitized normalization logs satisfy story acceptance criteria.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-30T12:00:00Z'
+
+top_issues: []
+
+waiver:
+  active: false
+
+quality_score: 95
+expires: '2025-10-14T00:00:00Z'
+
+evidence:
+  tests_reviewed: 3
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'Normalization logging masks entity text with deterministic hashes (filtra/ner/normalization.py:88-99).'
+  performance:
+    status: PASS
+    notes: 'Deduplication remains linear and covered by tests (filtra/ner/normalization.py:64-73).'
+  reliability:
+    status: PASS
+    notes: 'CLI and orchestration tests cover alias map integration (tests/test_cli.py:1-213).'
+  maintainability:
+    status: PASS
+    notes: 'Configuration helpers follow typed, validated structure (filtra/configuration/alias_map.py:180-309).'
+
+recommendations:
+  immediate: []
+  future: []

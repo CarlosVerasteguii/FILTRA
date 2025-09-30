@@ -1,0 +1,14 @@
+aliases:
+  Python:
+    - PYTHON
+    - python
+  PyTorch:
+    - pytorch
+    - Py Torch
+  Amazon Web Services:
+    - AWS
+    - Amazon Web Service
+locale_overrides:
+  es:
+    aprendizaje automatico: Machine Learning
+    ingenieria de datos: Data Engineering
