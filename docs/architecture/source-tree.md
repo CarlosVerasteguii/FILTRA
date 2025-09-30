@@ -52,7 +52,9 @@ project-root/
 │   ├── test_ner_pipeline.py
 │   ├── test_rubric.py
 │   ├── test_llm_client.py
-│   └── test_reporting.py
+│   └── reporting/
+│       ├── __init__.py
+│       └── test_entities_section.py
 ├── scripts/
 │   └── warmup_demo.ps1
 ├── requirements.in
@@ -63,4 +65,5 @@ project-root/
 └── .env.example
 ```
 
-
+
+

@@ -20,6 +20,14 @@
   - Assert HTTP client honours proxy environment variables via patched settings
 
 ### Integration Tests
+#### Canonical Entity Coverage
+- Unit tests must cover context snippet helpers, alias compatibility via the legacy entities alias, canonical grouping determinism, and aggregation across multiple documents/locales.
+- Integration tests should assert that orchestration merges per-document occurrences once and that normalization logs capture totals and alias merges without leaking resume text.
+
+#### Quiet and Wide Modes
+- CLI integration tests must verify that quiet executions still emit the final entities section and status lines while suppressing intermediate logs, and that enabling `--wide` adds the sources column with stable ordering.
+- Reporting unit tests should exercise width-aware helpers to keep default output near 100 columns and validate wide-mode formatting, empty states, and localization fallbacks.
+
 - **Scope:** PDF extraction + normalization pipeline; language detection/localization with es-MX default and overrides; scoring orchestrator with real rubric/alias data; CLI run with golden samples (offline mock).
 - **Location:** `tests/integration/test_pipeline.py`, `tests/integration/test_cli_run.py`
 - **Test Infrastructure:**
@@ -50,4 +58,4 @@
 - Excessive mocking can mask integration gaps; ensure integration suites exercise real pipeline paths.
 - No automated perf suite; monitor warm-up runtime logs for regressions.
 
-
+

@@ -7,20 +7,21 @@
 
 ### Key Interaction Paradigms
 - Single-run, linear workflow: parse → NER → LLM → render.
-- Explicit progress messages at INFO level; `--quiet` suppresses non-errors.
+- Explicit progress messages at INFO level; quiet runs suppress non-errors while still printing the final entities section and status summary.
+- Width-aware rendering defaults to ~100 columns; enabling `--wide` expands the layout with additional columns.
 - Errors are actionable and mapped to explicit exit codes.
 
 ### Core Screens and Views (Terminal Sections)
 - Header (run metadata: timestamp, models used)
 - Inputs summary (paths, sizes)
-- Entities (normalized list: skills, companies)
+- Entities (canonical aggregates for skills/companies; `--wide` adds sources column)
 - Compatibility (score + weighted sub-scores)
 - Strengths and Gaps (bulleted)
 - Next Steps (brief, optional)
 
 ### Accessibility
 - Use high-contrast ASCII formatting only; avoid color reliance.
-- Respect terminal width; wrap lines to ~100 chars for readability.
+- Respect terminal width; wrap lines to ~100 chars for readability; warn when wide mode may exceed typical terminals.
 
 ### Branding
 - Keep neutral CLI tone; include project name “FILTRA” in header.
@@ -33,4 +34,4 @@
 - File paths and encodings must handle Windows paths and UTF-8 content reliably.
 - Provide PowerShell-friendly examples in `--help`.
 - Dependencies should install via `pip` on Windows 11 without native build toolchains (prefer prebuilt wheels).
-
+

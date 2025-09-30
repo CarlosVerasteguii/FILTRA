@@ -49,4 +49,10 @@ sequenceDiagram
         CLI-->>User: Warm-up status report
     end
 ```
-
+
+
+### Entity Processing Flow
+- The orchestrator requests entity extraction per document, passing document role and display labels so the NER pipeline can build EntityOccurrence instances with span, context snippet, and language metadata.
+- After all documents are processed, the orchestrator concatenates occurrences in ingestion order and invokes normalization once to produce deterministic CanonicalEntity aggregates.
+- Normalization updates canonical labels, computes ordered contexts/sources, and records collection totals in the normalization log before returning the enriched ExtractedEntityCollection.
+- Reporting receives canonical entities plus quiet/wide flags from the CLI; quiet suppresses progress messaging while still emitting the final entities section, and wide mode expands the table with document sources.

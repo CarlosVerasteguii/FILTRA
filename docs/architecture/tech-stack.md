@@ -66,16 +66,49 @@
 **Relationships:**
 - Managed within EvaluationRun; referenced by PromptTemplateAssembler and ReportRenderer.
 - Ingests signals from Language Detection & Localization component and exposes them to downstream modules.
-#### ExtractedEntityCollection
-**Purpose:** Aggregates structured entities (skills, companies, education, languages) produced by the multilingual NER pipeline after normalization/deduplication.
+### Canonical Entity Data Model
+#### EntityOccurrence
+**Purpose:** Represents a single detected entity span before and after normalization, preserving document context for reporting and audit trails.
 
 **Key Attributes:**
-- entities: List[Entity] - Entity objects with type, canonical name, aliases, and confidence score.
-- normalization_log: List[str] - Trace of transformations (casefolding, alias mapping) applied for FR13 auditability.
+- raw_text / canonical_text: Original span text and the resolved canonical form.
+- category: EntityCategory enumeration (skills, companies, etc.).
+- confidence: Float score from the NER pipeline.
+- span: Tuple[int, int] indicating character offsets within the source document.
+- document_role / document_display: Logical role (resume, job_description) and user-facing label.
+- context_snippet: Optional excerpt surrounding the occurrence for report snippets.
+- source_language: Language code inferred for the occurrence.
 
 **Relationships:**
-- Consumes text from ResumeDocument; feeds normalized data into RubricScorecard and report generation.
-- Uses AliasMap to resolve synonyms and apply deduplication rules.
+- Produced by filtra/ner/pipeline.py with document metadata supplied by the orchestrator.
+- Grouped into CanonicalEntity aggregates during normalization.
+#### CanonicalEntity
+**Purpose:** Captures the canonical representation of related occurrences along with ordered contexts and document sources.
+
+**Key Attributes:**
+- text: Final canonical label after normalization and alias resolution.
+- category: EntityCategory shared by grouped occurrences.
+- top_confidence: Highest confidence value among occurrences.
+- occurrence_count: Total occurrences grouped under this canonical entry.
+- occurrences: Tuple[EntityOccurrence, ...] preserving ingestion order.
+- contexts / sources: Tuples mirroring occurrences for snippet display and source labeling.
+
+**Relationships:**
+- Built inside filtra/ner/normalization.py; consumed by reporting and scoring layers.
+- Serialized within ExtractedEntityCollection for downstream consumers.
+#### ExtractedEntityCollection
+**Purpose:** Aggregates canonical entities and their occurrences into a single structure returned by the NER pipeline after normalization.
+
+**Key Attributes:**
+- occurrences: Tuple[EntityOccurrence, ...] concatenated across processed documents.
+- canonical_entities: Tuple[CanonicalEntity, ...] used by reporting and scoring modules.
+- entities: Legacy alias (Tuple[CanonicalEntity, ...]) maintained temporarily for backward compatibility.
+- language_profile: Optional LanguageProfile snapshot carried through the pipeline.
+- normalization_log: Tuple[str, ...] summarizing normalization, alias application, and document totals for FR13 auditability.
+
+**Relationships:**
+- Returned by filtra/ner/pipeline.py and enriched by filtra/orchestration/runner.py when merging per-document results.
+- Feeds RubricScorecard, ReportEnvelope, and any analytics that rely on canonical entities.
 #### AliasMap
 **Purpose:** Maintains curated alias mappings and language-agnostic normalization rules applied to extracted entities.
 
@@ -121,8 +154,8 @@
 
 **Key Attributes:**
 - summary_sections: List[ReportSection] - Ordered blocks (overview, strengths, gaps, entity highlights) ready for terminal rendering.
-- render_options: Dict[str, Any] - Flags influencing layout (`wide`, `quiet`, localization).
+- render_options: Dict[str, Any] - Flags influencing layout (`wide` adds sources/extra width, `quiet` suppresses progress while retaining the final entities section, plus localization).
 
 **Relationships:**
 - Receives RubricScorecard data, LLMAnalysis artifacts, and the effective locale from LanguageProfile; passed to ReportRenderer for CLI display.
-- Stored alongside EvaluationRun for FR12 golden sample comparisons.
+- Stored alongside EvaluationRun for FR12 golden sample comparisons.

@@ -6,19 +6,19 @@
 3. FR3: The tool shall run a local HuggingFace NER pipeline to extract structured entities (e.g., skills, companies) from the resume text.
 4. FR4: The tool shall send the resume text, extracted entities, and job description to an LLM via OpenRouter to obtain a compatibility score and qualitative analysis.
 5. FR5: The LLM output shall include: (a) an overall compatibility score (0–100), (b) a concise justification, (c) top strengths, and (d) key gaps relative to the job description.
-6. FR6: The tool shall render a terminal-friendly report that combines LLM insights with the NER entities in a clear, readable format.
+6. FR6: The tool shall render a terminal-friendly report that combines LLM insights with canonical entity aggregates, preserving ASCII readability at ~100 columns and supporting quiet/wide layout controls.
 7. FR7: The CLI shall provide usage/help flags and accept at minimum: --resume <pdf_path>, --jd <txt_path>; optional flags may include model/config options.
 8. FR8: The tool shall read the OpenRouter API key from an environment variable and must not require hardcoding secrets.
 9. FR9: The tool shall handle common errors (missing files, PDF parsing failures, API timeouts/errors, model load errors) and exit with a non-zero code on failure.
 10. FR10: The tool shall print minimal progress and error messages suitable for a single-run CLI workflow.
 11. FR11: The tool shall compute a 0–100 compatibility score using a defined rubric with weighted criteria (e.g., skills match, experience relevance); sub-scores shall be included in the report.
 12. FR12: The repository shall include 2–3 golden sample inputs (resume + JD) and an expected report schema to validate output shape.
-13. FR13: The tool shall normalize and de-duplicate extracted entities before rendering the report, including casefolding, trimming, and application of an alias map; normalization should be language-agnostic (ES/EN).
+13. FR13: The tool shall normalize and de-duplicate extracted entities into canonical aggregates that retain per-document occurrences, alias transformations, and normalization logs while remaining language-agnostic (ES/EN).
 14. FR14: The CLI shall support `--llm-model`, `--ner-model`, and prompt parameter flags (e.g., temperature, max tokens) with validation and sane defaults.
 15. FR15: The tool shall detect unavailable dependencies (e.g., offline OpenRouter or missing NER weights) and degrade gracefully with a clear notice (e.g., skip NER or substitute a mock LLM response).
 16. FR16: Provide an optional warm-up command to prefetch models and verify connectivity (OpenRouter, model cache) before first demo run.
 17. FR17: Auto-detect input language (resume/JD) and set prompt language accordingly; allow override via `--lang`.
-18. FR18: Implement and document flags `--quiet`, `--wide`, `--seed`, and subcommand `warm-up`; ensure they appear in `--help` with PowerShell examples.
+18. FR18: Implement and document flags `--quiet`, `--wide`, `--seed`, and the `warm-up` subcommand; quiet mode suppresses progress logs but still prints the final entities section, while wide mode expands the entities table with sources. Ensure help output includes PowerShell examples.
 
 ### Non-Functional (NFR)
 1. NFR1 (Privacy & Security): Do not store resume or job description content beyond immediate processing; do not log sensitive text; API keys must be provided via environment variables only.
@@ -41,4 +41,4 @@
 18. NFR18 (Test Coverage): Maintain ≥70% line coverage overall and ≥80% in core modules (parse, NER, scoring) measured by the test suite.
 19. NFR19 (Data Handling): Process resume/JD content in memory only; do not write inputs or derived text to disk; only model cache is persisted.
 20. NFR20 (Egress Documentation): README must document OpenRouter base URL and model CDN endpoints used; warm-up prints which endpoints were contacted.
-
+

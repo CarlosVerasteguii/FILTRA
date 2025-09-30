@@ -1,7 +1,7 @@
 # Components
 
 ### CLI Command Layer
-**Responsibility:** Typer-based command surface exposing `run` and `warm-up` subcommands, parsing CLI flags, validating inputs, and handing off execution.
+**Responsibility:** Typer-based command surface exposing `run` and `warm-up` subcommands, parsing CLI flags (quiet, wide, model options), validating inputs, and handing off execution while ensuring quiet runs still emit the final entities section.
 
 **Key Interfaces:**
 - `run(resume_path, jd_path, **options)`
@@ -9,7 +9,7 @@
 
 **Dependencies:** Execution Orchestrator; Diagnostics & Warmup Service; Configuration & Persistence.
 
-**Technology Stack:** `typer` 0.12.3 on top of `click` 8.1.7 with stdlib logging.
+**Technology Stack:** `typer` 0.12.3 on top of `click` 8.1.7 with stdlib logging and quiet-aware logging configuration.
 
 ### Execution Orchestrator
 **Responsibility:** Central controller for end-to-end processing—stitches together parsing, extraction, scoring, LLM call, and reporting within a deterministic pipeline.
@@ -44,7 +44,7 @@
 
 **Technology Stack:** langdetect tuned to prioritize Spanish confidence; fallback heuristics when detection is ambiguous; integrates with `utils/language.py` helpers.
 ### Entity Extraction & Normalization Module
-**Responsibility:** Run HuggingFace NER pipeline, normalize/deduplicate entities per FR13, and persist transformation logs.
+**Responsibility:** Run the HuggingFace NER pipeline, emit EntityOccurrence records with document context, normalize canonical entities per FR13, and persist transformation logs.
 
 **Key Interfaces:**
 - `extract_entities(text, lang) -> ExtractedEntityCollection`
@@ -52,7 +52,7 @@
 
 **Dependencies:** `transformers`, `tokenizers`, AliasMap, CPU-optimized settings.
 
-**Technology Stack:** Transformers pipeline with thread-safe model loading, locale-aware alias application.
+**Technology Stack:** Transformers pipeline with thread-safe model loading, locale-aware alias application, and shared helpers for context snippet extraction.
 
 ### Rubric & Scoring Engine
 **Responsibility:** Apply rubric weights/thresholds to normalized entities and job description context to compute deterministic sub-scores and totals.
@@ -77,7 +77,7 @@
 **Technology Stack:** Async-capable `httpx` client used synchronously; structured timeout/retry policies.
 
 ### Report Composition Layer
-**Responsibility:** Merge rubric metrics, LLM insights, and extracted entities into terminal-ready sections respecting `--wide`, `--quiet`, and localization flags.
+**Responsibility:** Merge rubric metrics, LLM insights, and canonical entities into terminal-ready sections, ensuring quiet runs still emit the final entities summary and `--wide` expands tables with document sources while maintaining ASCII formatting.
 
 **Key Interfaces:**
 - `build_envelope(scorecard, llm_analysis, entities) -> ReportEnvelope`
@@ -85,7 +85,7 @@
 
 **Dependencies:** `rich`; localization helpers; text wrapping utilities.
 
-**Technology Stack:** Rich console with fallback plain formatter for quiet mode.
+**Technology Stack:** Rich console with fallback plain formatter for quiet mode, width-aware helpers, and localization utilities shared with EvaluationRun.
 
 ### Diagnostics & Warmup Service
 **Responsibility:** Execute optional warm-up command: prefetch models, verify API connectivity, report readiness status before demos.
@@ -141,4 +141,4 @@ graph LR
     Config --> Samples
     LLM -->|HTTPS| OpenRouter
     NER -->|Weights| HF
-```
+```
