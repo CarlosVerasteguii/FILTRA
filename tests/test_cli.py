@@ -15,7 +15,7 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
-from filtra.ner import ExtractedEntity, ExtractedEntityCollection
+from filtra.ner import EntityOccurrence, ExtractedEntityCollection
 from filtra.orchestration import ExecutionOutcome, HealthCheck, WarmupResult
 from filtra.utils import LoadedDocument
 
@@ -44,23 +44,37 @@ def stub_ner_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def _fake_extract_entities(**kwargs: object) -> ExtractedEntityCollection:
         language = (kwargs.get("language_hint") or "und").lower()
-        return ExtractedEntityCollection(
-            entities=(
-                ExtractedEntity(
-                    text="Filtra Technologies",
-                    category="company",
-                    confidence=0.99,
-                    span=(0, 19),
-                    source_language=language,
-                ),
-                ExtractedEntity(
-                    text="Python",
-                    category="skill",
-                    confidence=0.95,
-                    span=(20, 26),
-                    source_language=language,
-                ),
+        role = str(kwargs.get("document_role") or "document")
+        display = str(kwargs.get("document_display") or "document")
+        occurrences = (
+            EntityOccurrence(
+                raw_text="Filtra Technologies",
+                canonical_text="Filtra Technologies",
+                category="company",
+                confidence=0.99,
+                span=(0, 19),
+                document_role=role,
+                document_display=display,
+                source_language=language,
+                context_snippet="Filtra Technologies",
+                ingestion_index=0,
             ),
+            EntityOccurrence(
+                raw_text="Python",
+                canonical_text="Python",
+                category="skill",
+                confidence=0.95,
+                span=(20, 26),
+                document_role=role,
+                document_display=display,
+                source_language=language,
+                context_snippet="Python",
+                ingestion_index=1,
+            ),
+        )
+        return ExtractedEntityCollection(
+            occurrences=occurrences,
+            canonical_entities=(),
             language_profile=language,
         )
 

@@ -2,17 +2,16 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Sequence
+from typing import Callable, Iterable, Sequence
 
 from filtra.errors import NERModelError
+from filtra.ner.models import EntityCategory, EntityOccurrence, ExtractedEntityCollection
+from filtra.utils.text import build_context_snippet
 
 logger = logging.getLogger("filtra.ner.pipeline")
 
 DEFAULT_MODEL_ID = "Davlan/bert-base-multilingual-cased-ner-hrl"
-
-EntityCategory = Literal["skill", "company", "title", "education", "location"]
 
 _ENTITY_GROUP_MAPPING: dict[str, EntityCategory] = {
     "ORG": "company",
@@ -30,37 +29,18 @@ _ENTITY_GROUP_MAPPING: dict[str, EntityCategory] = {
 }
 
 
-@dataclass(frozen=True)
-class ExtractedEntity:
-    """Structured representation of a single NER entity."""
-
-    text: str
-    category: EntityCategory
-    confidence: float
-    span: tuple[int, int]
-    source_language: str
-
-
-@dataclass(frozen=True)
-class ExtractedEntityCollection:
-    """Collection wrapper providing future hooks for normalization metadata."""
-
-    entities: tuple[ExtractedEntity, ...]
-    language_profile: object | None = None
-    normalization_log: tuple[str, ...] = ()
-    source_document_id: str | None = None
-
-
 def extract_entities(
     *,
     text: str,
     language_hint: str | None = None,
     model_id: str | None = None,
     cache_path: Path | None = None,
+    document_role: str = "document",
+    document_display: str = "document",
     pipeline_factory: Callable[[str, Path | None], Callable[[str], Sequence[dict]]]
     | None = None,
 ) -> ExtractedEntityCollection:
-    """Run the multilingual NER pipeline and return structured entities."""
+    """Run the multilingual NER pipeline and return structured occurrences."""
 
     resolved_model = (model_id or DEFAULT_MODEL_ID).strip()
     if not resolved_model:
@@ -85,10 +65,19 @@ def extract_entities(
             remediation="Retry after verifying the model cache and proxy settings.",
         ) from exc
 
-    entities = tuple(_convert_predictions(raw_results, language_hint))
+    occurrences = tuple(
+        _convert_predictions(
+            raw_results,
+            language_hint,
+            text,
+            document_role=document_role,
+            document_display=document_display,
+        )
+    )
 
     return ExtractedEntityCollection(
-        entities=entities,
+        occurrences=occurrences,
+        canonical_entities=(),
         language_profile=language_hint,
     )
 
@@ -173,12 +162,17 @@ def _prefetch_artifacts(
 
 
 def _convert_predictions(
-    predictions: Iterable[dict], language_hint: str | None
-) -> Iterable[ExtractedEntity]:
-    """Normalise raw pipeline output into ExtractedEntity instances."""
+    predictions: Iterable[dict],
+    language_hint: str | None,
+    text: str,
+    *,
+    document_role: str,
+    document_display: str,
+) -> Iterable[EntityOccurrence]:
+    """Normalise raw pipeline output into EntityOccurrence instances."""
 
     language = (language_hint or "und").lower()
-    entities: list[ExtractedEntity] = []
+    candidates: list[dict] = []
 
     for item in predictions:
         if not isinstance(item, dict):
@@ -188,29 +182,43 @@ def _convert_predictions(
         category = _ENTITY_GROUP_MAPPING.get(raw_group, "skill")
 
         word = item.get("word") or item.get("text") or ""
-        text = word.replace("##", "")
+        text_value = word.replace("##", "")
         start = int(item.get("start", 0))
         end = int(item.get("end", start))
         confidence = float(item.get("score", 0.0))
 
-        entities.append(
-            ExtractedEntity(
-                text=text,
-                category=category,
-                confidence=confidence,
-                span=(start, end),
-                source_language=language,
-            )
+        candidates.append(
+            {
+                "raw_text": text_value,
+                "category": category,
+                "span": (start, end),
+                "confidence": confidence,
+            }
         )
 
-    entities.sort(key=lambda entity: entity.span)
-    return entities
+    candidates.sort(key=lambda entry: (entry["span"][0], entry["span"][1]))
+
+    for index, entry in enumerate(candidates):
+        span = entry["span"]
+        context = build_context_snippet(text, span)
+        yield EntityOccurrence(
+            raw_text=entry["raw_text"],
+            canonical_text=entry["raw_text"],
+            category=entry["category"],
+            confidence=entry["confidence"],
+            span=span,
+            document_role=document_role,
+            document_display=document_display,
+            source_language=language,
+            context_snippet=context,
+            ingestion_index=index,
+        )
 
 
 __all__ = [
     "DEFAULT_MODEL_ID",
     "EntityCategory",
-    "ExtractedEntity",
+    "EntityOccurrence",
     "ExtractedEntityCollection",
     "extract_entities",
     "warm_cache",

@@ -6,7 +6,11 @@ import pytest
 
 from filtra.configuration import load_alias_map
 from filtra.errors import InputValidationError
-from filtra.ner import ExtractedEntity, ExtractedEntityCollection, normalize_entities
+from filtra.ner import (
+    EntityOccurrence,
+    ExtractedEntityCollection,
+    normalize_entities,
+)
 
 
 def test_normalize_entities_deduplicates_and_applies_aliases(tmp_path: Path) -> None:
@@ -26,55 +30,112 @@ locale_overrides:
     alias_map = load_alias_map([extra_alias_map])
 
     collection = ExtractedEntityCollection(
-        entities=(
-            ExtractedEntity(
-                text="  PyTorch  ",
+        occurrences=(
+            EntityOccurrence(
+                raw_text="  PyTorch  ",
+                canonical_text="  PyTorch  ",
                 category="skill",
                 confidence=0.61,
                 span=(0, 8),
+                document_role="resume",
+                document_display="resume.txt",
                 source_language="en",
+                context_snippet="...PyTorch...",
+                ingestion_index=0,
             ),
-            ExtractedEntity(
-                text="pytorch",
+            EntityOccurrence(
+                raw_text="pytorch",
+                canonical_text="pytorch",
                 category="skill",
                 confidence=0.74,
                 span=(10, 18),
+                document_role="job",
+                document_display="job.txt",
                 source_language="en",
+                context_snippet="pytorch stack",
+                ingestion_index=1,
             ),
-            ExtractedEntity(
-                text="ingenieria de datos",
+            EntityOccurrence(
+                raw_text="ingenieria de datos",
+                canonical_text="ingenieria de datos",
                 category="skill",
                 confidence=0.92,
                 span=(20, 40),
+                document_role="resume",
+                document_display="resume.txt",
                 source_language="es",
+                context_snippet="ingenieria de datos",
+                ingestion_index=2,
             ),
-            ExtractedEntity(
-                text="AWS",
+            EntityOccurrence(
+                raw_text="AWS",
+                canonical_text="AWS",
                 category="company",
                 confidence=0.88,
                 span=(41, 44),
+                document_role="resume",
+                document_display="resume.txt",
                 source_language="en",
+                context_snippet="AWS cloud",
+                ingestion_index=3,
             ),
         ),
+        canonical_entities=(),
         language_profile="es",
     )
 
     normalized = normalize_entities(collection, alias_map=alias_map)
 
-    texts_by_category = [
-        (entity.category, entity.text, entity.confidence)
-        for entity in normalized.entities
+    canonical_summary = [
+        (
+            entity.category,
+            entity.text,
+            entity.top_confidence,
+            entity.occurrence_count,
+            entity.aliases,
+            entity.sources,
+        )
+        for entity in normalized.canonical_entities
     ]
-    assert texts_by_category == [
-        ("company", "Amazon Web Services", pytest.approx(0.88)),
-        ("skill", "Data Engineering", pytest.approx(0.92)),
-        ("skill", "PyTorch", pytest.approx(0.74)),
+    assert canonical_summary == [
+        (
+            "company",
+            "Amazon Web Services",
+            pytest.approx(0.88),
+            1,
+            ("AWS",),
+            ("resume:resume.txt",),
+        ),
+        (
+            "skill",
+            "Data Engineering",
+            pytest.approx(0.92),
+            1,
+            ("ingenieria de datos",),
+            ("resume:resume.txt",),
+        ),
+        (
+            "skill",
+            "PyTorch",
+            pytest.approx(0.74),
+            2,
+            ("  PyTorch  ", "pytorch"),
+            ("resume:resume.txt", "job:job.txt"),
+        ),
     ]
 
-    combined_log = " ".join(normalized.normalization_log)
-    assert "Deduplicated alias" in combined_log
-    assert "Applied locale override" in combined_log
-    assert "PyTorch" not in combined_log
+    assert [occ.canonical_text for occ in normalized.occurrences] == [
+        "PyTorch",
+        "PyTorch",
+        "Data Engineering",
+        "Amazon Web Services",
+    ]
+
+    log_message = " ".join(normalized.normalization_log)
+    assert "Normalized 4 occurrences to 3 canonical entities" in log_message
+    assert "Merged 2 aliases" in log_message
+    assert "PyTorch" not in log_message
+
 
 def test_load_alias_map_merges_additional_sources(tmp_path: Path) -> None:
     override_map = tmp_path / "alias-override.yaml"
@@ -103,6 +164,7 @@ locale_overrides:
     canonical_en, log_en = alias_map.canonicalize("DS", language="en")
     assert canonical_en == "Data Science"
     assert any("locale override" in entry.lower() for entry in log_en)
+
 
 def test_load_alias_map_rejects_canonical_collision(tmp_path: Path) -> None:
     conflict_map = tmp_path / "alias-canonical-conflict.yaml"
@@ -136,7 +198,3 @@ aliases:
         load_alias_map([conflict_map])
 
     assert "assigned" in str(exc.value).lower()
-
-
-
-

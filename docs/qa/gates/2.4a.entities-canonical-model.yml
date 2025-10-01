@@ -1,0 +1,41 @@
+schema: 1
+story: '2.4a'
+story_title: 'Canonical Entity Data Model'
+gate: PASS
+status_reason: 'Canonical entity model implemented with deterministic ordering and comprehensive tests.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-30T16:55:12.9962789-06:00'
+
+quality_score: 100
+expires: '2025-10-14'
+
+top_issues: []
+waiver:
+  active: false
+
+evidence:
+  tests_reviewed: 5
+  risks_identified: 0
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'No secret-handling changes; data structures remain in-memory.'
+  performance:
+    status: PASS
+    notes: 'Deterministic ordering uses tuple conversions only; no additional loops beyond needed grouping.'
+  reliability:
+    status: PASS
+    notes: 'Normalization handles empty canonicals defensively and preserves ingestion ordering.'
+  maintainability:
+    status: PASS
+    notes: 'Immutability in dataclasses and shared snippet helper improve clarity.'
+
+recommendations:
+  immediate: []
+  future:
+    - action: 'Schedule a run with FILTRA_ENABLE_SMOKE once HF integration is ready to exercise the live pipeline.'
+      refs: ['tests/test_ner_pipeline.py#L80']

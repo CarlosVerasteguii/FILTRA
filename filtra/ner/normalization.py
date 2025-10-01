@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Iterable, Mapping
+from dataclasses import replace
+from typing import Iterable, Mapping
 
 from filtra.configuration import AliasMap
-from filtra.ner.pipeline import ExtractedEntity, ExtractedEntityCollection
+from filtra.ner.models import CanonicalEntity, EntityOccurrence, ExtractedEntityCollection
 
 
 def normalize_entities(
@@ -15,71 +16,87 @@ def normalize_entities(
     alias_map: AliasMap,
     language_hint: str | None = None,
 ) -> ExtractedEntityCollection:
-    """Apply trimming, casefolding, alias mapping, and deduplication."""
+    """Apply alias mapping and construct canonical entity aggregates."""
 
     log = list(collection.normalization_log)
-    deduped: dict[tuple[str, str], ExtractedEntity] = {}
+    grouped: dict[tuple[str, str], list[EntityOccurrence]] = {}
+    normalized_occurrences: list[EntityOccurrence] = []
+    observed_documents: set[tuple[str, str]] = set()
 
-    for entity in collection.entities:
+    for occurrence in collection.occurrences:
         language = _resolve_language(
             language_hint,
             collection.language_profile,
-            entity.source_language,
+            occurrence.source_language,
         )
-        canonical_text, step_log = alias_map.canonicalize(entity.text, language=language)
+        canonical_text, step_log = alias_map.canonicalize(
+            occurrence.raw_text,
+            language=language,
+        )
         log.extend(_sanitize_log_entries(step_log))
 
         if not canonical_text:
-            log.append("Skipped entity with empty canonical text after normalization.")
+            log.append("Skipped occurrence with empty canonical text after normalization.")
             continue
 
-        key = (entity.category, canonical_text.casefold())
-        normalised_entity = ExtractedEntity(
-            text=canonical_text,
-            category=entity.category,
-            confidence=entity.confidence,
-            span=entity.span,
-            source_language=entity.source_language,
+        normalized = replace(occurrence, canonical_text=canonical_text)
+        key = (normalized.category, canonical_text.casefold())
+        grouped.setdefault(key, []).append(normalized)
+        normalized_occurrences.append(normalized)
+        observed_documents.add((normalized.document_role, normalized.document_display))
+
+    canonical_entities: list[CanonicalEntity] = []
+
+    for (category, _), occurrences in grouped.items():
+        ordered = sorted(
+            occurrences,
+            key=lambda item: (
+                item.ingestion_index,
+                item.document_display.lower(),
+                item.raw_text.lower(),
+            ),
+        )
+        canonical_label = ordered[0].canonical_text
+        alias_values = tuple(dict.fromkeys(item.raw_text for item in ordered))
+        descriptor = _entity_descriptor(category, canonical_label)
+
+        if len(alias_values) > 1:
+            log.append(
+                "Merged "
+                f"{len(alias_values)} aliases into {descriptor}"
+            )
+
+        canonical_entities.append(
+            CanonicalEntity(
+                text=canonical_label,
+                category=category,
+                top_confidence=max(item.confidence for item in ordered),
+                occurrence_count=len(ordered),
+                occurrences=tuple(ordered),
+                contexts=tuple(item.context_snippet for item in ordered),
+                sources=tuple(f"{item.document_role}:{item.document_display}" for item in ordered),
+                aliases=alias_values,
+            )
         )
 
-        existing = deduped.get(key)
-        if existing:
-            current_descriptor = _entity_descriptor(entity.category, canonical_text)
-            existing_descriptor = _entity_descriptor(existing.category, existing.text)
-            if entity.confidence > existing.confidence:
-                deduped[key] = normalised_entity
-                log.append(
-                    f"Deduplicated alias {existing_descriptor} "
-                    f"in favour of {current_descriptor} based on confidence scores."
-                )
-            else:
-                log.append(
-                    f"Discarded duplicate alias {current_descriptor} "
-                    f"because {existing_descriptor} has equal or higher confidence."
-                )
-            continue
+    canonical_entities.sort(key=lambda entity: (entity.category, entity.text.casefold()))
 
-        deduped[key] = normalised_entity
-
-    sorted_entities = tuple(
-        sorted(
-            deduped.values(),
-            key=lambda item: (item.category, item.text, item.span[0], item.span[1]),
-        )
-    )
     log.append(
-        "Normalised "
-        f"{len(collection.entities)} entities to "
-        f"{len(sorted_entities)} canonical entries."
+        "Normalized "
+        f"{len(collection.occurrences)} occurrences to "
+        f"{len(canonical_entities)} canonical entities across "
+        f"{len(observed_documents)} documents."
     )
 
     return ExtractedEntityCollection(
-        entities=sorted_entities,
+        occurrences=tuple(sorted(
+            normalized_occurrences,
+            key=lambda item: item.ingestion_index,
+        )),
+        canonical_entities=tuple(canonical_entities),
         language_profile=collection.language_profile,
         normalization_log=tuple(log),
-        source_document_id=collection.source_document_id,
     )
-
 
 
 _QUOTED_VALUE_RE = re.compile(r"'([^']*)'")
@@ -97,6 +114,8 @@ def _sanitize_log_entries(entries: Iterable[str]) -> Iterable[str]:
 
 def _entity_descriptor(category: str, text: str) -> str:
     return f"{category}:{_mask_value(text)}"
+
+
 def _resolve_language(
     hint: str | None,
     profile: object | None,
@@ -136,10 +155,3 @@ def _iter_language_candidates(
 
 
 __all__ = ["normalize_entities"]
-
-
-
-
-
-
-

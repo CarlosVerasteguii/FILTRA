@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 
@@ -16,7 +16,12 @@ from filtra.errors import (
     PdfExtractionError,
     TimeoutExceededError,
 )
-from filtra.ner import ExtractedEntityCollection, extract_entities, normalize_entities
+from filtra.ner import (
+    EntityOccurrence,
+    ExtractedEntityCollection,
+    extract_entities,
+    normalize_entities,
+)
 from filtra.orchestration.diagnostics import get_proxy_environment, resolve_cache_directory
 from filtra.exit_codes import ExitCode
 from filtra.ingestion import extract_text as extract_pdf_text
@@ -130,7 +135,7 @@ def run_pipeline(
             "Normalised {canonical} canonical entities via {groups} alias groups "
             "({aliases} aliases; overrides: {locales})."
         ).format(
-            canonical=len(normalized_entities.entities),
+            canonical=len(normalized_entities.canonical_entities),
             groups=alias_details.canonical_count,
             aliases=alias_details.alias_count,
             locales=", ".join(alias_details.locale_codes or ("none",)),
@@ -151,6 +156,7 @@ def _load_document(path: Path, *, description: str) -> LoadedDocument:
     if path.suffix.lower() == ".pdf":
         return extract_pdf_text(path, description=description)
     return load_text_document(path, description)
+
 
 
 def _perform_run(
@@ -192,20 +198,55 @@ def _perform_run(
         extra={f"proxy_{name.lower()}": bool(value) for name, value in proxy_environment.items()},
     )
 
-    entities = extract_entities(
-        text=resume_doc.text,
-        language_hint=None,
-        model_id=ner_model,
-        cache_path=cache_path,
+    documents = (
+        ("resume", resume_doc),
+        ("job_description", jd_doc),
     )
 
-    raw_count = len(entities.entities)
-    logger.info(
-        "Extracted entities",
-        extra={
-            "entity_count": raw_count,
-            "entity_categories": sorted({entity.category for entity in entities.entities}),
-        },
+    per_document: list[ExtractedEntityCollection] = []
+    total_occurrences = 0
+    language_profiles: list[object] = []
+
+    for role, document in documents:
+        extracted = extract_entities(
+            text=document.text,
+            language_hint=None,
+            model_id=ner_model,
+            cache_path=cache_path,
+            document_role=role,
+            document_display=document.display_name,
+        )
+        per_document.append(extracted)
+        total_occurrences += len(extracted.occurrences)
+        if extracted.language_profile is not None:
+            language_profiles.append(extracted.language_profile)
+        logger.info(
+            "Extracted entities",
+            extra={
+                "document_role": role,
+                "document_display": document.display_name,
+                "entity_count": len(extracted.occurrences),
+                "entity_categories": sorted({occ.category for occ in extracted.occurrences}),
+            },
+        )
+
+    merged_occurrences: list[EntityOccurrence] = []
+    for collection in per_document:
+        ordered = sorted(collection.occurrences, key=lambda occ: occ.ingestion_index)
+        merged_occurrences.extend(ordered)
+
+    reassigned_occurrences = [
+        replace(occurrence, ingestion_index=index)
+        for index, occurrence in enumerate(merged_occurrences)
+    ]
+
+    language_profile = next((profile for profile in language_profiles if profile is not None), None)
+    language_hint = language_profile if isinstance(language_profile, str) else None
+
+    merged_collection = ExtractedEntityCollection(
+        occurrences=tuple(reassigned_occurrences),
+        canonical_entities=(),
+        language_profile=language_profile,
     )
 
     alias_map = load_alias_map(alias_map_paths)
@@ -220,18 +261,17 @@ def _perform_run(
         },
     )
 
-    normalized = normalize_entities(entities, alias_map=alias_map)
+    normalized = normalize_entities(merged_collection, alias_map=alias_map, language_hint=language_hint)
     logger.info(
         "Normalised entities",
         extra={
-            "raw_entity_count": raw_count,
-            "canonical_entity_count": len(normalized.entities),
+            "raw_entity_count": total_occurrences,
+            "canonical_entity_count": len(normalized.canonical_entities),
         },
     )
 
     logger.info("Pipeline execution is not yet implemented in this scaffold.")
-    return normalized, cache_path, alias_details, raw_count
-
+    return normalized, cache_path, alias_details, total_occurrences
 
 def handle_domain_error(error: FiltraError) -> ExecutionOutcome:
     """Translate a domain error into an execution outcome and log remediation hints."""

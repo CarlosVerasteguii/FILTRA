@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -9,7 +9,7 @@ import pytest
 from filtra.errors import NERModelError
 from filtra.exit_codes import ExitCode
 from filtra.ner import (
-    ExtractedEntity,
+    EntityOccurrence,
     ExtractedEntityCollection,
     extract_entities,
 )
@@ -57,16 +57,20 @@ def test_extract_entities_spanish_fixture(tmp_path: Path) -> None:
         language_hint="es",
         model_id="custom/es-model",
         cache_path=cache_path,
+        document_role="resume",
+        document_display="resume_es.txt",
         pipeline_factory=factory,
     )
 
     assert calls["model_id"] == "custom/es-model"
     assert calls["cache_path"] == cache_path
-    categories = {entity.category for entity in collection.entities}
+    categories = {occ.category for occ in collection.occurrences}
     assert categories == {"company", "skill"}
-    assert any("Integración" in entity.text for entity in collection.entities)
-    assert all(entity.source_language == "es" for entity in collection.entities)
-
+    assert any("integraci" in occ.raw_text.lower() for occ in collection.occurrences)
+    assert all(occ.source_language == "es" for occ in collection.occurrences)
+    assert all(occ.document_role == "resume" for occ in collection.occurrences)
+    assert all(len(occ.context_snippet) >= len(occ.raw_text) for occ in collection.occurrences)
+    assert [occ.ingestion_index for occ in collection.occurrences] == list(range(len(collection.occurrences)))
 
 
 @pytest.mark.integration
@@ -78,13 +82,19 @@ def test_extract_entities_smoke_multilingual_pipeline(tmp_path: Path) -> None:
     text = _load_fixture("resume_es.txt")
 
     try:
-        collection = extract_entities(text=text, language_hint="es", model_id=None)
+        collection = extract_entities(
+            text=text,
+            language_hint="es",
+            model_id=None,
+            document_role="resume",
+            document_display="resume_es.txt",
+        )
     except NERModelError as exc:
         pytest.skip(f"NER pipeline unavailable: {exc}")
 
-    assert len(collection.entities) >= 1
-    assert all(entity.source_language == "es" for entity in collection.entities)
-    assert any("ó" in entity.text or "ñ" in entity.text for entity in collection.entities)
+    assert len(collection.occurrences) >= 1
+    assert all(occ.source_language == "es" for occ in collection.occurrences)
+    assert any("ó" in occ.raw_text or "ñ" in occ.raw_text for occ in collection.occurrences)
 
 
 def test_extract_entities_english_fixture() -> None:
@@ -119,15 +129,17 @@ def test_extract_entities_english_fixture() -> None:
         text=text,
         language_hint="en",
         model_id="custom/en-model",
+        document_role="resume",
+        document_display="resume_en.txt",
         pipeline_factory=factory,
     )
 
     assert received["model_id"] == "custom/en-model"
     assert received["cache_path"] is None
-    categories = {entity.category for entity in collection.entities}
+    categories = {occ.category for occ in collection.occurrences}
     assert {"company", "skill"}.issubset(categories)
-    assert len(collection.entities) >= 2
-    assert all(entity.source_language == "en" for entity in collection.entities)
+    assert len(collection.occurrences) >= 2
+    assert all(occ.source_language == "en" for occ in collection.occurrences)
 
 
 def test_run_pipeline_logs_cache_and_proxy_environment(
@@ -150,23 +162,25 @@ def test_run_pipeline_logs_cache_and_proxy_environment(
     def fake_extract_entities(**kwargs):
         assert kwargs["model_id"] == "custom-model"
         assert kwargs["cache_path"] == cache_path
-        return ExtractedEntityCollection(
-            entities=(
-                ExtractedEntity(
-                    text="Bright Labs",
-                    category="company",
-                    confidence=0.99,
-                    span=(0, 11),
-                    source_language="es",
-                ),
-                ExtractedEntity(
-                    text="Integración",
-                    category="skill",
-                    confidence=0.88,
-                    span=(12, 23),
-                    source_language="es",
-                ),
+        role = kwargs.get("document_role", "document")
+        display = kwargs.get("document_display", "document")
+        occurrences = (
+            EntityOccurrence(
+                raw_text=f"{role}-name",
+                canonical_text=f"{role}-name",
+                category="company",
+                confidence=0.99,
+                span=(0, len(str(role))),
+                document_role=role,
+                document_display=display,
+                source_language="es",
+                context_snippet=f"context for {role}",
+                ingestion_index=0,
             ),
+        )
+        return ExtractedEntityCollection(
+            occurrences=occurrences,
+            canonical_entities=(),
             language_profile="es",
         )
 
@@ -187,3 +201,5 @@ def test_run_pipeline_logs_cache_and_proxy_environment(
     assert any(record.__dict__.get("proxy_no_proxy") is True for record in runner_records)
     assert any(getattr(record, "alias_map_groups", None) is not None for record in runner_records)
     assert any(getattr(record, "alias_map_aliases", None) is not None for record in runner_records)
+    assert any(getattr(record, "document_role", None) == "resume" for record in runner_records)
+    assert any(getattr(record, "document_role", None) == "job_description" for record in runner_records)
