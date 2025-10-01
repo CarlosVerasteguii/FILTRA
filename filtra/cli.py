@@ -18,6 +18,7 @@ from .orchestration import (
     run_pipeline,
     run_warmup,
 )
+from .reporting import render_entities_report
 
 APP_NAME = "filtra"
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -142,7 +143,7 @@ def _render_warmup_result(result: WarmupResult, *, quiet: bool) -> None:
     if quiet:
         typer.echo(
             f"Warm-up {result.overall_status} in {result.duration_seconds:.2f}s; "
-            f"cache {cache_summary}; {alias_summary}"
+            f"cache {cache_summary}; {alias_summary}; use --wide for source columns"
         )
         for check in result.checks:
             typer.echo(f"[{check.status}] {check.name}")
@@ -161,6 +162,7 @@ def _render_warmup_result(result: WarmupResult, *, quiet: bool) -> None:
         f"{alias_details.canonical_count} groups / {alias_details.alias_count} aliases "
         f"(locales: {', '.join(alias_details.locale_codes or ('none',))})"
     )
+    typer.echo("Report modifiers    : --quiet suppresses logs; --wide adds source columns")
 
     typer.echo("")
     typer.echo("Proxy environment:")
@@ -267,10 +269,16 @@ def run(
         readable=True,
         help="Additional alias map YAML files to merge (pass multiple times).",
     ),
+    wide: bool = typer.Option(
+        False,
+        "--wide",
+        help="Render the entities report with extended source columns.",
+    ),
 ) -> None:
     """Execute the resume vs job description evaluation pipeline."""
 
     logger = logging.getLogger("filtra.cli")
+    quiet_mode = _is_quiet_mode()
 
     try:
         resume_path = _validate_file(resume, "resume")
@@ -294,10 +302,19 @@ def run(
         jd_path=jd_path,
         ner_model=resolved_model,
         alias_map_paths=alias_paths,
+        quiet=quiet_mode,
+        wide=wide,
     )
 
-    if outcome.message and not _is_quiet_mode():
+    printed_message = False
+    if outcome.message and not quiet_mode:
         typer.echo(outcome.message)
+        printed_message = True
+
+    if outcome.report is not None:
+        if printed_message:
+            typer.echo("")
+        typer.echo(render_entities_report(outcome.report))
 
     raise typer.Exit(code=int(outcome.exit_code))
 

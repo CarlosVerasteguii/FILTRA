@@ -154,6 +154,15 @@ def test_root_help_lists_commands() -> None:
     assert "--quiet" in normalized
 
 
+def test_run_help_mentions_wide() -> None:
+    result = runner.invoke(app, ["run", "--help"])
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    normalized = _normalize(result.stdout)
+    assert "--wide" in normalized
+    assert "Render the entities report" in normalized
+
+
 def test_run_requires_required_options() -> None:
     result = runner.invoke(app, ["run"])
 
@@ -174,6 +183,9 @@ def test_run_executes_with_valid_files(tmp_path: Path) -> None:
     assert "Resume resume.txt decoded as UTF-8 (with BOM)" in output
     assert "Job description job.txt decoded as UTF-8 (with BOM)" in output
     assert "Pipeline execution is not yet implemented in this scaffold." in output
+    assert "Canonical Entities" in output
+    assert "Filtra Technologies" in output
+    assert "Tip: re-run with --wide" in output
 
 
 def test_run_accepts_pdf_resume(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -242,10 +254,28 @@ def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
     result = runner.invoke(app, ["--quiet", "run", "--resume", str(resume), "--jd", str(jd)])
 
     assert result.exit_code == int(ExitCode.SUCCESS)
-    assert "Pipeline execution is not yet implemented in this scaffold." not in _normalize(
-        result.stdout
-    )
+    combined = _normalize(result.stdout)
+    assert "Pipeline execution is not yet implemented in this scaffold." not in combined
+    assert "Canonical Entities" in result.stdout
     assert getattr(configure_logging, "_level", logging.INFO) == logging.WARNING
+
+
+def test_run_wide_flag_includes_sources_column(tmp_path: Path) -> None:
+    resume = tmp_path / "resume.txt"
+    resume.write_text("resume")
+    jd = tmp_path / "job.txt"
+    jd.write_text("jd")
+
+    result = runner.invoke(
+        app,
+        ["run", "--resume", str(resume), "--jd", str(jd), "--wide"],
+    )
+
+    assert result.exit_code == int(ExitCode.SUCCESS)
+    output = result.stdout
+    assert "Sources" in output
+    assert "resume" in output.lower()
+    assert "Tip: re-run with --wide" not in output
 
 
 def test_run_handles_input_validation_error(
@@ -289,6 +319,8 @@ def test_run_accepts_custom_ner_model(
         recorded["jd"] = kwargs.get("jd_path")
         recorded["ner_model"] = kwargs.get("ner_model")
         recorded["alias_map_paths"] = kwargs.get("alias_map_paths")
+        recorded["quiet"] = kwargs.get("quiet")
+        recorded["wide"] = kwargs.get("wide")
         return ExecutionOutcome(exit_code=ExitCode.SUCCESS, status="success", message="ok")
 
     monkeypatch.setattr("filtra.cli.run_pipeline", _fake_run_pipeline)
@@ -310,6 +342,8 @@ def test_run_accepts_custom_ner_model(
     assert recorded["ner_model"] == "custom/company-ner"
     assert recorded["resume"] == resume.resolve()
     assert recorded["jd"] == jd.resolve()
+    assert recorded["quiet"] is False
+    assert recorded["wide"] is False
 
 
 def test_run_rejects_empty_ner_model(tmp_path: Path) -> None:
@@ -442,6 +476,7 @@ def test_warmup_command_renders_summary(monkeypatch: pytest.MonkeyPatch) -> None
     assert "Cache on disk" in combined
     assert "Alias map sources" in combined
     assert "Alias map coverage" in combined
+    assert "Report modifiers" in combined
     assert "2.0 KiB" in combined
     assert "[PASS] Alias map configuration" in combined
     assert "[PASS] OpenRouter connectivity" in combined
@@ -459,6 +494,7 @@ def test_warmup_command_respects_quiet(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "alias map" in combined.lower()
     assert "[PASS] Alias map configuration" in combined
     assert "[PASS] OpenRouter connectivity" in combined
+    assert "use --wide" in combined
 
 
 def test_warmup_command_maps_errors(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -532,6 +568,7 @@ def test_run_accepts_alias_map_override(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     def _run_pipeline(**kwargs: object) -> ExecutionOutcome:
         captured["alias_map_paths"] = kwargs.get("alias_map_paths")
+        captured["wide"] = kwargs.get("wide")
         return ExecutionOutcome(exit_code=ExitCode.SUCCESS, status="success", message=None)
 
     monkeypatch.setattr("filtra.cli.run_pipeline", _run_pipeline)
@@ -554,3 +591,4 @@ def test_run_accepts_alias_map_override(monkeypatch: pytest.MonkeyPatch, tmp_pat
     resolved_paths = captured.get("alias_map_paths")
     assert isinstance(resolved_paths, list)
     assert alias_file.resolve() in resolved_paths
+    assert captured["wide"] is False

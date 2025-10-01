@@ -25,6 +25,7 @@ from filtra.ner import (
 from filtra.orchestration.diagnostics import get_proxy_environment, resolve_cache_directory
 from filtra.exit_codes import ExitCode
 from filtra.ingestion import extract_text as extract_pdf_text
+from filtra.reporting import ReportEnvelope, ReportRenderOptions
 from filtra.utils import LoadedDocument, load_text_document
 
 logger = logging.getLogger("filtra.orchestration.runner")
@@ -38,6 +39,7 @@ class ExecutionOutcome:
     status: str
     message: str | None = None
     remediation: str | None = None
+    report: ReportEnvelope | None = None
 
 
 _ERROR_MAPPINGS: tuple[
@@ -83,6 +85,8 @@ def run_pipeline(
     *,
     ner_model: str,
     alias_map_paths: Sequence[Path] | None = None,
+    quiet: bool = False,
+    wide: bool = False,
 ) -> ExecutionOutcome:
     """Execute the evaluation orchestration lifecycle."""
 
@@ -143,10 +147,16 @@ def run_pipeline(
         "Pipeline execution is not yet implemented in this scaffold.",
     ]
 
+    report = ReportEnvelope(
+        canonical_entities=normalized_entities.canonical_entities,
+        render_options=ReportRenderOptions(quiet=quiet, wide=wide),
+    )
+
     return ExecutionOutcome(
         exit_code=ExitCode.SUCCESS,
         status="success",
         message="\n".join(summary),
+        report=report,
     )
 
 

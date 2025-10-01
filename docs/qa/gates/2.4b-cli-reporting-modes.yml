@@ -1,0 +1,104 @@
+schema: 1
+story: '2.4b'
+story_title: 'CLI Reporting Modes'
+gate: PASS
+status_reason: 'All acceptance criteria met with comprehensive test coverage and clean implementation.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2025-09-30T10:30:00Z'
+
+top_issues: []
+
+waiver:
+  active: false
+
+quality_score: 100
+
+evidence:
+  tests_reviewed: 25
+  cli_tests_pass: true
+  quiet_mode_validated: true
+  wide_mode_validated: true
+  help_text_verified: true
+
+acceptance_criteria_validation:
+  ac1_wide_flag:
+    status: PASS
+    notes: '--wide flag surfaced in CLI help (filtra run --help), warm-up output mentions report modifiers, renderer toggles sources column correctly'
+  ac2_quiet_mode:
+    status: PASS
+    notes: 'Quiet mode suppresses progress logs (logging.WARNING level) while preserving final entities section output to stdout'
+  ac3_documentation:
+    status: PASS
+    notes: 'CLI help updated, README.md includes PowerShell examples for --quiet and --wide, warm-up diagnostics describe modes'
+  ac4_automated_tests:
+    status: PASS
+    notes: 'Tests validate quiet suppression, wide column rendering, help text updates; assertions are resilient (content-based, not width-based)'
+
+implementation_quality:
+  code_structure:
+    status: PASS
+    notes: 'Clean separation: CLI defines options, orchestrator passes flags, renderer respects options'
+  standards_compliance:
+    status: PASS
+    notes: 'Follows coding standards: black formatting, proper module structure, CLI output discipline maintained'
+  test_coverage:
+    status: PASS
+    notes: '25 CLI tests pass, specific tests for quiet mode, wide mode, and help text; avoids brittle assertions'
+
+nfr_validation:
+  maintainability:
+    status: PASS
+    notes: 'Code is clear and maintainable; ReportRenderOptions provides clean abstraction for future render flags'
+  reliability:
+    status: PASS
+    notes: 'Proper error handling preserved in quiet mode; renderer handles empty states gracefully'
+  usability:
+    status: PASS
+    notes: 'Helpful tip in default mode guides users to --wide; quiet mode reduces noise as expected'
+  performance:
+    status: PASS
+    notes: 'Table rendering is efficient; no performance concerns with wide mode'
+
+trace:
+  totals:
+    requirements: 4
+    full: 4
+    partial: 0
+    none: 0
+  ac_covered: [1, 2, 3, 4]
+  ac_gaps: []
+  notes: 'All acceptance criteria have comprehensive test coverage'
+
+test_validation:
+  quiet_mode_tests:
+    - test_quiet_flag_suppresses_info_logs: 'Verifies logging suppression while preserving entities output'
+    - test_warmup_command_respects_quiet: 'Validates quiet mode in warm-up command'
+  wide_mode_tests:
+    - test_run_wide_flag_includes_sources_column: 'Confirms Sources column appears and tip is removed'
+  help_text_tests:
+    - test_run_help_mentions_wide: 'Validates --wide flag in help output'
+    - test_root_help_lists_commands: 'Confirms --quiet flag in global help'
+  integration_tests:
+    - test_run_executes_with_valid_files: 'Validates default mode includes tip about --wide'
+
+recommendations:
+  immediate: []
+  future: []
+
+risk_assessment:
+  risks_identified: 0
+  critical_risks: 0
+  notes: 'No risks identified; implementation is straightforward and well-tested'
+
+final_notes: |
+  This is a textbook implementation of CLI reporting modes. The developer:
+  
+  1. Properly wired flags through all layers (CLI → orchestrator → renderer)
+  2. Maintained ASCII-only output with stable ~100 column default width
+  3. Added comprehensive tests that validate behavior without brittle assertions
+  4. Updated all relevant documentation (help text, README, warm-up output)
+  
+  The code quality is excellent, test coverage is comprehensive, and all acceptance 
+  criteria are fully satisfied. No issues or concerns identified.
+  
+  Story is ready for Done status.

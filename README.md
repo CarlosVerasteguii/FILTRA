@@ -44,11 +44,14 @@ python -m filtra run --resume "./samples/inputs/resume_windows_sample.txt" --jd 
 # Run quietly, emitting only warnings and errors
 python -m filtra --quiet run --resume "./samples/inputs/resume_windows_sample.txt" --jd "./samples/inputs/jd_windows_sample.txt"
 
+# Expand the entities table with a sources column
+python -m filtra run --resume "./samples/inputs/resume_windows_sample.txt" --jd "./samples/inputs/jd_windows_sample.txt" --wide
+
 # Prime model cache and verify OpenRouter connectivity
 python -m filtra warm-up
 ```
 
-`--quiet` drops the global logging threshold to WARN while keeping structured Rich logging handlers. The scaffold logs placeholder information without leaking resume or JD contents.
+`--quiet` drops the global logging threshold to WARN while keeping the final canonical entities report on stdout. Pair it with `--wide` to append a sources column alongside the default entity, category, match count, and confidence values.
 
 ### Health Diagnostics
 Use `python -m filtra --health` before demos to confirm the runtime, secrets, proxy variables, and Hugging Face cache are in good shape. The command never performs network calls; it only inspects local configuration and prints PASS/FAIL rows with remediation guidance for anything missing.
