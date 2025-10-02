@@ -150,6 +150,7 @@ def run_pipeline(
     report = ReportEnvelope(
         canonical_entities=normalized_entities.canonical_entities,
         render_options=ReportRenderOptions(quiet=quiet, wide=wide),
+        language_profile=normalized_entities.language_profile,
     )
 
     return ExecutionOutcome(

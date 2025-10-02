@@ -183,7 +183,9 @@ def test_run_executes_with_valid_files(tmp_path: Path) -> None:
     assert "Resume resume.txt decoded as UTF-8 (with BOM)" in output
     assert "Job description job.txt decoded as UTF-8 (with BOM)" in output
     assert "Pipeline execution is not yet implemented in this scaffold." in output
-    assert "Canonical Entities" in output
+    assert "Canonical Entities Report" in output
+    assert "Skills" in output
+    assert "Companies" in output
     assert "Filtra Technologies" in output
     assert "Tip: re-run with --wide" in output
 
@@ -254,9 +256,13 @@ def test_quiet_flag_suppresses_info_logs(tmp_path: Path) -> None:
     result = runner.invoke(app, ["--quiet", "run", "--resume", str(resume), "--jd", str(jd)])
 
     assert result.exit_code == int(ExitCode.SUCCESS)
-    combined = _normalize(result.stdout)
+    output = result.stdout
+    combined = _normalize(output)
+    assert combined.startswith("filtra quiet run: entities report ready")
     assert "Pipeline execution is not yet implemented in this scaffold." not in combined
-    assert "Canonical Entities" in result.stdout
+    assert "Skills entries:" in combined
+    assert "Exit code: 0" in output
+    assert "Skills" in output
     assert getattr(configure_logging, "_level", logging.INFO) == logging.WARNING
 
 
@@ -273,8 +279,8 @@ def test_run_wide_flag_includes_sources_column(tmp_path: Path) -> None:
 
     assert result.exit_code == int(ExitCode.SUCCESS)
     output = result.stdout
-    assert "Sources" in output
-    assert "resume" in output.lower()
+    assert "SOURCES" in output
+    assert "resume:resume.txt" in output.lower()
     assert "Tip: re-run with --wide" not in output
 
 

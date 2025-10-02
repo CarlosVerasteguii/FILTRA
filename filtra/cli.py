@@ -18,7 +18,7 @@ from .orchestration import (
     run_pipeline,
     run_warmup,
 )
-from .reporting import render_entities_report
+from .reporting import ReportEnvelope, ReportRenderOptions, render_entities_report
 
 APP_NAME = "filtra"
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -306,16 +306,27 @@ def run(
         wide=wide,
     )
 
-    printed_message = False
-    if outcome.message and not quiet_mode:
+    report_envelope = outcome.report or ReportEnvelope(
+        canonical_entities=(),
+        render_options=ReportRenderOptions(quiet=quiet_mode, wide=wide),
+    )
+    report_output = render_entities_report(report_envelope)
+
+    if quiet_mode:
+        skills_total, companies_total = _summarize_entities(report_envelope)
+        typer.echo("filtra quiet run: entities report ready")
+        typer.echo(
+            f"Skills entries: {skills_total} | Companies entries: {companies_total}"
+        )
+        typer.echo(report_output)
+        typer.echo(f"Exit code: {int(outcome.exit_code)}")
+        raise typer.Exit(code=int(outcome.exit_code))
+
+    if outcome.message:
         typer.echo(outcome.message)
-        printed_message = True
+        typer.echo("")
 
-    if outcome.report is not None:
-        if printed_message:
-            typer.echo("")
-        typer.echo(render_entities_report(outcome.report))
-
+    typer.echo(report_output)
     raise typer.Exit(code=int(outcome.exit_code))
 
 
@@ -357,3 +368,13 @@ def entrypoint() -> None:
 
 
 __all__ = ["app", "entrypoint", "configure_logging", "ExitCode"]
+
+
+def _summarize_entities(report: ReportEnvelope) -> tuple[int, int]:
+    """Return counts for skill and company aggregates present in a report."""
+
+    skills = sum(1 for entity in report.canonical_entities if entity.category == "skill")
+    companies = sum(
+        1 for entity in report.canonical_entities if entity.category == "company"
+    )
+    return skills, companies
